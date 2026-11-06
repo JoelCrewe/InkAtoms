@@ -104,6 +104,54 @@ def find_bonds(atoms, cutoffs=None, scale=1.15, pbc=None, metal_scale=1.0):
     return np.concatenate(I), np.concatenate(J), np.concatenate(S).astype(int)
 
 
+# Longest distance (Å) still drawn as a double / triple bond, per element pair.
+# Set between typical single, double and triple bond lengths and checked on
+# ASE's g2 molecules: ethene, HCHO, CO2, CS2, DMSO, SO2 -> double; HCN, N2,
+# nitriles -> triple; thiophene and pyrrole get alternating double bonds,
+# while benzene and pyridine (1.39-1.40 Å, aromatic) stay single.
+ORDER_LIMITS = {
+    frozenset(("C",)): (1.385, 1.28),
+    frozenset(("C", "N")): (1.31, 1.22),
+    frozenset(("C", "O")): (1.29, 1.15),
+    frozenset(("C", "S")): (1.64, None),
+    frozenset(("N",)): (1.33, 1.19),
+    frozenset(("N", "O")): (1.27, None),
+    frozenset(("O",)): (1.35, None),
+    frozenset(("S", "O")): (1.55, None),
+    frozenset(("P", "O")): (1.53, None),
+    frozenset(("S",)): (1.95, None),
+}
+
+
+def bond_orders(atoms, bonds=None, limits=None):
+    """Guess bond orders (1, 2 or 3) from bond lengths.
+
+    A length-based guess for drawing, not chemistry: it needs reasonable
+    geometries (optimised or experimental, not hot MD frames) and only knows
+    the pairs in ORDER_LIMITS (C, N, O, S, P); everything else is single.
+    bonds: (i, j, shift) from find_bonds (found if not given).
+    limits: {pair: (max double, max triple or None)} merged over ORDER_LIMITS.
+    """
+    s = as_structure(atoms)
+    i, j, shift = find_bonds(s) if bonds is None else bonds
+    table = dict(ORDER_LIMITS)
+    for key, value in (limits or {}).items():
+        table[_pair_key(key)] = value
+    T = shift @ s.cell if (s.cell is not None and len(shift)) else 0.0
+    d = np.linalg.norm(s.positions[j] + T - s.positions[i], axis=1)
+    orders = np.ones(len(i), int)
+    for k in range(len(i)):
+        lim = table.get(frozenset((s.symbols[i[k]], s.symbols[j[k]])))
+        if lim is None:
+            continue
+        double, triple = lim
+        if triple is not None and d[k] <= triple:
+            orders[k] = 3
+        elif double is not None and d[k] <= double:
+            orders[k] = 2
+    return orders
+
+
 def coordination(atoms, **kwargs):
     """Number of bonds on each atom."""
     s = as_structure(atoms)

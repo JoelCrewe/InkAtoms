@@ -15,6 +15,7 @@ from matplotlib.colors import to_rgb
 from matplotlib.patches import Circle, Polygon
 
 from ._elements import DATA
+from .bonds import bond_orders as guess_orders
 from .bonds import find_bonds
 from .structure import Structure, as_structure
 from .styles import Style, edge_of, mix, style as get_style
@@ -85,6 +86,27 @@ def _highlight(s, highlight):
     return mask, colours
 
 
+# (offset across the bond, line width), both in units of style.bond_width
+_MULTI = {
+    1: [(0.0, 1.0)],
+    2: [(-0.66, 0.52), (0.66, 0.52)],
+    3: [(-0.86, 0.40), (0.0, 0.40), (0.86, 0.40)],
+}
+
+
+def _resolve_orders(s, bond_orders, bonds):
+    """-> int array of bond orders, one per bond from find_bonds."""
+    i, j, _ = bonds
+    if bond_orders is None or bond_orders is False:
+        return np.ones(len(i), int)
+    if bond_orders is True or bond_orders == "auto":
+        return guess_orders(s, bonds)
+    if isinstance(bond_orders, dict):
+        table = {frozenset(k): v for k, v in bond_orders.items()}
+        return np.array([table.get(frozenset((s.ids[a], s.ids[b])), 1) for a, b in zip(i, j)], int)
+    raise ValueError("bond_orders must be False, True/'auto' or {(id_a, id_b): order}")
+
+
 def _bond_polygon(a, b, half_width):
     d = b - a
     n = np.hypot(*d)
@@ -95,7 +117,8 @@ def _bond_polygon(a, b, half_width):
 
 
 def draw(ax, atoms, *, view="z", up=None, rotate=None, style="jmol", mode="ballstick",
-         highlight=None, highlight_front=False, bonds=True, cutoffs=None, bond_scale=1.15, pbc_bonds=None,
+         highlight=None, highlight_front=False, bonds=True, cutoffs=None, bond_scale=1.15,
+         bond_orders=False, pbc_bonds=None, scale=None,
          cell=False, radii=None, depth_range=None, autoscale=True, pad=0.5,
          axis_off=True, zorder=2, rasterized=False, **style_changes) -> StructureArtist:
     """Draw a structure on ax.
@@ -112,11 +135,15 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, style="jmol", mode="balls
                 the viewer (keeps the atoms a figure is about in sight)
     bonds       draw bonds; cutoffs={"Mo-S": 2.85} overrides pair cutoffs (Å), others
                 are bond_scale x the sum of covalent radii
+    bond_orders draw double/triple bonds: True guesses them from bond lengths (good
+                geometries of C/N/O/S/P compounds), or give {(id_a, id_b): order}
     pbc_bonds   bonds across periodic boundaries are drawn as half-bonds towards the
                 image (default: follow the structure's pbc)
     cell        draw the unit cell outline
     radii       {symbol: radius in Å} overrides
     depth_range (near, far) depth values for the fade; fix this across panels of a trajectory
+    scale       inches per Å: fix the drawing scale (see set_scale), so separate
+                figures and panels all show structures at the same size
     """
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}")
@@ -205,40 +232,50 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, style="jmol", mode="balls
     if bonds and mode != "spacefill" and n > 1:
         bi, bj, shifts = find_bonds(s, cutoffs=cutoffs, scale=bond_scale, pbc=pbc_bonds)
         T = shifts @ s.cell if (s.cell is not None and len(shifts)) else np.zeros((len(bi), 3))
+        orders = _resolve_orders(s, bond_orders, (bi, bj, shifts))
         split = isinstance(st.bond_color, str) and st.bond_color == "split"
         bond_rgb = None if split else np.array(to_rgb(st.bond_color))
         w = st.bond_width
-        for i, j, tvec in zip(bi, bj, T):
+        for i, j, tvec, order in zip(bi, bj, T, orders):
             pi, pj = s.positions[i], s.positions[j] + tvec
             v = pj - pi
             L = np.linalg.norm(v)
             u = v / L
-            si = np.sqrt(max(rr[i] ** 2 - (w / 2) ** 2, 0.0))
-            sj = np.sqrt(max(rr[j] ** 2 - (w / 2) ** 2, 0.0))
-            if L <= si + sj:
-                continue  # spheres overlap: bond hidden
-            ai, aj = pi + u * si, pj - u * sj
-            mid = 0.5 * (ai + aj)
-            if split or tvec.any():
-                halves = [(ai, mid, i), (aj - tvec, mid - tvec, j)]
-            else:
-                halves = [(ai, aj, None)]
-            for start, end, owner in halves:
-                A, M = start @ R.T, end @ R.T
-                dmid = 0.5 * (A[2] + M[2])
-                if owner is None:
-                    t = 1.0 if (hl[i] and hl[j]) else float(closeness(np.array([dmid]))[0])
+            d2 = (v @ R.T)[:2]
+            n2 = np.hypot(*d2)
+            perp = np.array([-d2[1], d2[0]]) / n2 if n2 > 1e-9 else np.zeros(2)
+            if order > 1 and n2 < 0.25 * L:
+                order = 1   # bond almost along the line of sight: side-by-side lines would overlap
+            for off, width in _MULTI[min(int(order), 3)]:
+                off, width = off * w, width * w
+                reach = abs(off) + width / 2
+                si = np.sqrt(max(rr[i] ** 2 - reach ** 2, 0.0))
+                sj = np.sqrt(max(rr[j] ** 2 - reach ** 2, 0.0))
+                if L <= si + sj:
+                    continue  # spheres overlap: bond hidden
+                ai, aj = pi + u * si, pj - u * sj
+                mid = 0.5 * (ai + aj)
+                if split or tvec.any():
+                    halves = [(ai, mid, i), (aj - tvec, mid - tvec, j)]
                 else:
-                    t = 1.0 if hl[owner] else float(closeness(np.array([dmid]))[0])
-                k = 1.0 - st.depth_shrink * (1.0 - t)
-                poly = _bond_polygon(A[:2], M[:2], 0.5 * w * k)
-                if poly is None:
-                    continue
-                face = base[owner] if (split and owner is not None) else (bond_rgb if bond_rgb is not None else base[i])
-                edge = edge_of(face, st.bond_edgecolor, st.darken)
-                fade = st.depth_fade * (1 - t)
-                add(dmid, -1, 0, Polygon(poly, closed=True),
-                    (*mix(face, bg, fade), 1.0), (*mix(edge, bg, fade), 1.0), st.bond_edgewidth * k)
+                    halves = [(ai, aj, None)]
+                for start, end, owner in halves:
+                    A, M = start @ R.T, end @ R.T
+                    dmid = 0.5 * (A[2] + M[2])
+                    if owner is None:
+                        t = 1.0 if (hl[i] and hl[j]) else float(closeness(np.array([dmid]))[0])
+                    else:
+                        t = 1.0 if hl[owner] else float(closeness(np.array([dmid]))[0])
+                    k = 1.0 - st.depth_shrink * (1.0 - t)
+                    shift2 = perp * off * k
+                    poly = _bond_polygon(A[:2] + shift2, M[:2] + shift2, 0.5 * width * k)
+                    if poly is None:
+                        continue
+                    face = base[owner] if (split and owner is not None) else (bond_rgb if bond_rgb is not None else base[i])
+                    edge = edge_of(face, st.bond_edgecolor, st.darken)
+                    fade = st.depth_fade * (1 - t)
+                    add(dmid, -1, 0, Polygon(poly, closed=True),
+                        (*mix(face, bg, fade), 1.0), (*mix(edge, bg, fade), 1.0), st.bond_edgewidth * k)
 
     # ---- cell
     corners2d = []
@@ -293,7 +330,45 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, style="jmol", mode="balls
     ax.set_aspect("equal")
     if axis_off:
         ax.set_axis_off()
+    if scale is not None:
+        set_scale(ax, scale)
     return art
+
+
+def set_scale(ax, inches_per_angstrom, centre=None):
+    """Set the axes limits so 1 Å is exactly inches_per_angstrom inches on the page,
+    centred on the current view (or on centre=(x, y) in Å). Use the same value
+    in every figure to keep structures at one scale across a paper."""
+    fig = ax.figure
+    box = ax.get_position(original=True)
+    w_in = box.width * fig.get_figwidth()
+    h_in = box.height * fig.get_figheight()
+    if centre is None:
+        centre = (np.mean(ax.get_xlim()), np.mean(ax.get_ylim()))
+    hx = 0.5 * w_in / inches_per_angstrom
+    hy = 0.5 * h_in / inches_per_angstrom
+    ax.set_xlim(centre[0] - hx, centre[0] + hx)
+    ax.set_ylim(centre[1] - hy, centre[1] + hy)
+    return ax
+
+
+def structure_figure(atoms, inches_per_angstrom=0.3, *, pad=0.4, max_size=12.0, **draw_kwargs):
+    """A new figure sized to the structure at a fixed scale (inches per Å),
+    with the structure filling it. Returns (fig, ax, artist)."""
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure()
+    ax = fig.add_axes([0, 0, 1, 1])
+    art = draw(ax, atoms, pad=0.0, **draw_kwargs)
+    x0, x1, y0, y1 = art.bounds
+    w = (x1 - x0 + 2 * pad) * inches_per_angstrom
+    h = (y1 - y0 + 2 * pad) * inches_per_angstrom
+    if max(w, h) > max_size:
+        raise ValueError(f"figure would be {w:.1f} x {h:.1f} in; lower inches_per_angstrom "
+                         f"or raise max_size")
+    fig.set_size_inches(w, h)
+    set_scale(ax, inches_per_angstrom, centre=(0.5 * (x0 + x1), 0.5 * (y0 + y1)))
+    return fig, ax, art
 
 
 def _cell_edges(o, a1, a2, a3):

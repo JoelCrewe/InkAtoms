@@ -75,6 +75,32 @@ and `"auto"` turns the structure to its widest face.
 `rotate="20x,-30y"` then tilts about the page's own axes. `up=` picks which
 direction points up the page.
 
+## Bond orders
+
+```python
+ia.draw(ax, molecule("C4H4S"), view="auto", bond_orders=True)   # guessed from bond lengths
+ia.draw(ax, atoms, bond_orders={(3, 7): 2, (7, 8): 3})          # or set by atom ids
+```
+
+The guess uses length limits per element pair (`ia.ORDER_LIMITS`, covering C, N,
+O, S and P) checked on ASE's g2 molecules: C=C, C=O, C≡N, S=O and so on come out
+right, thiophene and pyrrole get alternating double bonds, and aromatic rings
+whose bonds are all the same length (benzene, pyridine) stay single. It is a
+drawing aid and needs good geometries; it is off by default.
+
+![bond orders](docs/images/bond_orders.png)
+
+## Fixed scale
+
+Every length is in Å, so fixing inches per Å keeps all your structures at the
+same size across panels and figures:
+
+```python
+ia.draw(ax, atoms, scale=0.2)          # 1 Å = 0.2 in on the page, centred on the structure
+ia.set_scale(ax, 0.2)                  # same, after drawing
+fig, ax, art = ia.structure_figure(atoms, inches_per_angstrom=0.3)   # figure sized to fit
+```
+
 ## Selecting what to draw
 
 ```python

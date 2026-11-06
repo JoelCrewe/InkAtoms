@@ -81,3 +81,12 @@ ax.annotate("site", xy=(x, y + art.radius(site)), xytext=(x + 3, y + 3.2), fonts
 ia.legend(ax, art, loc="upper left", bbox_to_anchor=(1.0, 1.0), fontsize=7, markersize=6)
 ia.scale_bar(ax, 3, loc="lower left", fontsize=7, bbox_to_anchor=(1.03, 0.05), bbox_transform=ax.transAxes)
 save(fig, "panel")
+
+# 5. bond orders, and every molecule drawn at one fixed scale (0.2 in per Å)
+names = ["C4H4S", "CH3COOH", "H2CCHCN", "C2H6SO", "C6H6"]
+fig, axes = plt.subplots(1, len(names), figsize=(7.5, 1.7))
+fig.subplots_adjust(left=0, right=1, bottom=0, top=0.85, wspace=0)
+for ax, name in zip(axes, names):
+    ia.draw(ax, molecule(name), view="auto", bond_orders=True, shading="soft", scale=0.2)
+    ax.set_title(name, fontsize=8)
+save(fig, "bond_orders")

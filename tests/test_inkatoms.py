@@ -207,3 +207,38 @@ def test_highlight_front_draws_highlight_last():
     s = (["C", "O"], [[0, 0, 0], [0, 0, 5]])        # C behind O
     art = ia.draw(ax, s, view="z", bonds=False, highlight={0: "red"}, highlight_front=True)
     assert np.allclose(art.collection.get_facecolor()[-1][:3], (1, 0, 0))
+
+
+# ---------------------------------------------------------------- bond orders and scale
+
+@pytest.mark.parametrize("name, expected", [
+    ("C2H4", {2: 1}), ("C2H2", {3: 1}), ("C6H6", {}), ("HCN", {3: 1}), ("CO2", {2: 2}),
+    ("C2H6SO", {2: 1}), ("C4H4S", {2: 2}), ("C5H5N", {}), ("CH3COOH", {2: 1}), ("N2", {3: 1}),
+])
+def test_bond_orders_on_reference_molecules(name, expected):
+    ase = pytest.importorskip("ase.build")
+    orders = ia.bond_orders(ase.molecule(name))
+    counts = {o: int((orders == o).sum()) for o in (2, 3) if (orders == o).any()}
+    assert counts == expected
+
+
+def test_bond_orders_drawn_and_manual():
+    ase = pytest.importorskip("ase.build")
+    mol = ase.molecule("C2H4")
+    fig, ax = plt.subplots()
+    n1 = len(ia.draw(ax, mol, view="auto").collection.get_paths())
+    n2 = len(ia.draw(ax, mol, view="auto", bond_orders=True).collection.get_paths())
+    assert n2 == n1 + 2          # the C=C gets a second pair of half-bonds
+    n3 = len(ia.draw(ax, mol, view="auto", bond_orders={(0, 1): 3}).collection.get_paths())
+    assert n3 == n1 + 4
+
+
+def test_set_scale_and_structure_figure():
+    fig = plt.figure(figsize=(4, 3))
+    ax = fig.add_axes([0, 0, 1, 1])
+    ia.draw(ax, WATER, view="z", scale=0.5)
+    assert np.isclose(np.ptp(ax.get_xlim()), 8.0) and np.isclose(np.ptp(ax.get_ylim()), 6.0)
+    fig, ax, art = ia.structure_figure(WATER, inches_per_angstrom=1.0, pad=0.5, view="z")
+    x0, x1, y0, y1 = art.bounds
+    assert np.isclose(fig.get_figwidth(), x1 - x0 + 1.0)
+    assert np.isclose(np.ptp(ax.get_xlim()), fig.get_figwidth())

@@ -9,9 +9,9 @@
 """
 
 from . import select
-from .bonds import coordination, cutoff_matrix, find_bonds
+from .bonds import ORDER_LIMITS, bond_orders, coordination, cutoff_matrix, find_bonds
 from .extras import legend, legend_handles, scale_bar
-from .render import StructureArtist, draw
+from .render import StructureArtist, draw, set_scale, structure_figure
 from .structure import Structure, as_structure
 from .styles import PRESETS, Style, scheme_colors, style
 from .view import project, view_matrix
@@ -19,7 +19,7 @@ from .view import project, view_matrix
 __version__ = "0.1.0"
 
 __all__ = [
-    "draw", "StructureArtist", "Structure", "as_structure", "Style", "style", "PRESETS",
-    "scheme_colors", "find_bonds", "coordination", "cutoff_matrix", "legend",
+    "draw", "set_scale", "structure_figure", "StructureArtist", "Structure", "as_structure", "Style", "style", "PRESETS",
+    "scheme_colors", "find_bonds", "bond_orders", "ORDER_LIMITS", "coordination", "cutoff_matrix", "legend",
     "legend_handles", "scale_bar", "select", "view_matrix", "project",
 ]
