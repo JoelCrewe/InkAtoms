@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use inkatoms in published work, please cite it as below."
+title: "inkatoms: vector drawings of atomic structures in matplotlib"
+version: 0.2.0
+license: MIT
+repository-code: "https://github.com/JoelCrewe/InkAtoms"
+type: software
+authors:
+  - family-names: Crewe
+    given-names: Joel
+    # orcid: "https://orcid.org/0000-0000-0000-0000"   add yours
+    affiliation: "University of Oxford"
+keywords:
+  - matplotlib
+  - crystal structures
+  - molecules
+  - scientific visualisation

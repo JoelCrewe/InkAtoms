@@ -90,3 +90,25 @@ for ax, name in zip(axes, names):
     ia.draw(ax, molecule(name), view="auto", bond_orders=True, shading="soft", scale=0.2)
     ax.set_title(name, fontsize=8)
 save(fig, "bond_orders")
+
+# 6. features overview for the README
+from ase.spacegroup import crystal
+
+rutile = crystal(["Ti", "O"], basis=[(0, 0, 0), (0.3, 0.3, 0)], spacegroup=136,
+                 cellpar=[4.59, 4.59, 2.96, 90, 90, 90])
+fig, axes = plt.subplots(1, 4, figsize=(9.5, 2.6))
+ia.draw(axes[0], select.tile(rutile, (2, 2, 3), centred=False), view="z", rotate="-25x,15y",
+        polyhedra={"centers": "Ti"}, style="vesta")
+axes[0].set_title("polyhedra", fontsize=9)
+pt = __import__("ase.build", fromlist=["fcc111"]).fcc111("Pt", size=(4, 4, 3), vacuum=6.0)
+art = ia.draw(axes[1], pt, view="-y", rotate="12x", color_by="z", cmap="cividis", pbc_bonds=False)
+axes[1].set_title("color_by", fontsize=9)
+m = molecule("CH3COOH")
+art = ia.draw(axes[2], m, view="auto", bond_orders=True, shading="soft",
+              vectors=np.random.default_rng(3).normal(size=(len(m), 3)) * 0.45)
+ia.measure(art, [1, 0, 2])
+axes[2].set_title("vectors + measure", fontsize=9)
+cu = bulk("Cu", "fcc", a=3.61, cubic=True)
+ia.draw(axes[3], cu, view="z", rotate="-25x,20y", ghosts=1.9, cell=True, shading="soft")
+axes[3].set_title("ghost images", fontsize=9)
+save(fig, "features")

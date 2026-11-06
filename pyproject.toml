@@ -5,11 +5,11 @@ build-backend = "hatchling.build"
 [project]
 name = "inkatoms"
 version = "0.2.0"
-description = "Elegant vector ball-and-stick drawings of atomic structures in matplotlib"
+description = "Elegant vector drawings of atomic structures in matplotlib"
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Joel Crewe" }]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = ["numpy>=1.22", "matplotlib>=3.6", "scipy>=1.8"]
 keywords = ["matplotlib", "crystal structure", "molecule", "visualisation", "materials"]
 classifiers = [
@@ -17,7 +17,14 @@ classifiers = [
     "Framework :: Matplotlib",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Visualization",
+    "Intended Audience :: Science/Research",
 ]
+
+[project.urls]
+Homepage = "https://github.com/JoelCrewe/InkAtoms"
+Documentation = "https://joelcrewe.github.io/InkAtoms"
+Issues = "https://github.com/JoelCrewe/InkAtoms/issues"
+Changelog = "https://github.com/JoelCrewe/InkAtoms/blob/main/CHANGELOG.md"
 
 [project.scripts]
 inkatoms = "inkatoms.cli:main"
@@ -30,6 +37,9 @@ mdanalysis = ["MDAnalysis"]
 all = ["ase>=3.22", "pymatgen", "rdkit", "MDAnalysis", "pillow"]
 dev = ["pytest", "pytest-mpl", "ase>=3.22", "rdkit", "MDAnalysis", "pillow"]
 docs = ["sphinx", "sphinx-gallery", "furo", "ase>=3.22", "rdkit", "pillow"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["docs/_build", "docs/auto_examples", ".venv"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/inkatoms"]

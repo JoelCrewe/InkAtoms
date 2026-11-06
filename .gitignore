@@ -8,3 +8,7 @@ dist/
 .DS_Store
 examples/output/
 docs/images/*.pdf
+docs/_build/
+docs/auto_examples/
+docs/sg_execution_times.rst
+docs/generated/

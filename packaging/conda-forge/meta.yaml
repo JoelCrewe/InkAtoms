@@ -1,0 +1,48 @@
+# Draft conda-forge recipe. After the first PyPI release: fill in the sha256 of
+# the sdist (pip download inkatoms==0.2.0 --no-deps --no-binary :all:; shasum -a 256),
+# then open a pull request adding this file to https://github.com/conda-forge/staged-recipes
+# as recipes/inkatoms/meta.yaml.
+{% set name = "inkatoms" %}
+{% set version = "0.2.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: TODO
+
+build:
+  noarch: python
+  number: 0
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  entry_points:
+    - inkatoms = inkatoms.cli:main
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - hatchling
+  run:
+    - python >=3.10
+    - numpy >=1.22
+    - matplotlib-base >=3.6
+    - scipy >=1.8
+
+test:
+  imports:
+    - inkatoms
+  commands:
+    - inkatoms --help
+
+about:
+  home: https://github.com/JoelCrewe/InkAtoms
+  summary: Elegant vector drawings of atomic structures in matplotlib
+  license: MIT
+  license_file: LICENSE
+
+extra:
+  recipe-maintainers:
+    - JoelCrewe

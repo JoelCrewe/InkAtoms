@@ -1,0 +1,24 @@
+# Changelog
+
+## 0.2.0
+
+- Colour atoms by a value (`color_by=`) with `colorbar()`; per-atom arrows (`vectors=`)
+- Coordination polyhedra, filled rings with aromatic circles, hydrogen-bond contacts,
+  bond styles (breaking / forming / dashed / hidden), bond order 1.5 (solid + dashed)
+- Constraint crosses, vacancies, ghost periodic images, VESTA-style boundary atoms,
+  `select.make_whole`, lattice planes, cell vectors, axis triad
+- Perspective camera, fake ambient occlusion (`occlusion=`), volumetric slices from cube files
+- Inputs: RDKit molecules and SMILES (with exact bond orders), MDAnalysis, pymatgen
+  partial occupancies (drawn as pies)
+- Presets `vesta`, `colourblind`, `dark`; journal column sizes (`figsize`)
+- Labels with leader lines and repel, `measure()` for distances/angles/dihedrals
+- `inset()`, `panels()`, `animate()`, interactive `picker()`, editable SVG (`editable=True`),
+  automatic rasterising of very large drawings
+- `inkatoms` command-line tool; documentation site with gallery; image regression tests
+- Faster renderer (raw paths), metal-metal cutoffs tightened in compounds
+
+## 0.1.0
+
+- Depth-cued ball-and-stick drawing, Jmol/CPK/greyscale/black-and-white presets,
+  highlights, selections that keep ids, periodic half-bonds, unit cell, legend,
+  scale bar, bond orders, fixed inches-per-Å scale
