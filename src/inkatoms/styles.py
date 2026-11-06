@@ -4,8 +4,12 @@ Presets
 -------
 jmol       Jmol element colours (S yellow, O red, N blue, C grey, H white, ...)
 cpk        classic CPK model colours (C near-black, O red, N blue, S yellow, ...)
-greyscale  Jmol colours mapped to grey by luminance, dark outlines; prints well
-bw         black-and-white line art: white atoms, black outlines and bonds
+vesta        VESTA element colours
+colourblind  common elements on the Okabe-Ito palette, distinguishable with
+             colour-vision deficiency (metals sky blue, C dark grey, ...)
+greyscale    Jmol colours mapped to grey by luminance, dark outlines; prints well
+bw           black-and-white line art: white atoms, black outlines and bonds
+dark         Jmol colours on a dark background (slides), fading towards it
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ from typing import Mapping
 import numpy as np
 from matplotlib.colors import to_rgb
 
-from ._elements import DATA, SYMBOLS
+from ._elements import DATA, SYMBOLS, VESTA
 
 # ---------------------------------------------------------------- schemes
 
@@ -48,8 +52,25 @@ def _grey(symbol):
     return (v, v, v)
 
 
+# Okabe & Ito (2008) colour-blind-safe palette on the common elements
+_CB = {"H": "#ffffff", "C": "#505050", "N": "#0072b2", "O": "#d55e00", "S": "#f0e442",
+       "P": "#e69f00", "F": "#009e73", "Cl": "#009e73", "Br": "#8c4a2f", "I": "#cc79a7",
+       "Si": "#b3a17a", "B": "#f5b7a1", "Se": "#e3b505"}
+
+
+def _colourblind(symbol):
+    if symbol in _CB:
+        return _CB[symbol]
+    if symbol in _NOBLE:
+        return "#bfe6f5"
+    from .bonds import NONMETALS
+    return "#56b4e9" if symbol not in NONMETALS else "#999999"
+
+
 SCHEMES = {
     "jmol": lambda s: DATA[s][2],
+    "vesta": lambda s: VESTA.get(s, DATA[s][2]),
+    "colourblind": _colourblind,
     "cpk": _cpk,
     "grey": _grey,
     "white": lambda s: "#ffffff",
@@ -90,6 +111,12 @@ class Style:
     highlight_scale: float = 1.0         # radius factor for highlighted atoms
     cell_color: object = "#555555"
     cell_width: float = 0.05             # Å
+    occlusion: float = 0.0               # 0-1: darken buried atoms (fake ambient occlusion)
+    dash_length: float = 0.16            # Å, for dashed bonds and contacts
+    dash_gap: float = 0.11               # Å
+    contact_color: object = "#6f6f6f"    # dashed contacts / hydrogen bonds
+    contact_width: float = 0.08          # Å
+    vacancy_radius: float = 0.45         # Å
 
     def color(self, symbol):
         c = self.colors.get(symbol)
@@ -111,10 +138,15 @@ PRESETS = {
                        atom_edgewidth=0.7),
     "bw": Style(scheme="white", atom_edgecolor="black", atom_edgewidth=0.8,
                 bond_color="white", bond_edgecolor="black", bond_edgewidth=0.8,
-                cell_color="black"),
+                cell_color="black", contact_color="black"),
+    "vesta": Style(scheme="vesta"),
+    "colourblind": Style(scheme="colourblind", atom_edgecolor="#333333", bond_edgecolor="#333333"),
+    "dark": Style(background="#121212", cell_color="#bdbdbd", contact_color="#bdbdbd",
+                  atom_edgecolor="darker", darken=0.55),
 }
 _ALIASES = {"grayscale": "greyscale", "grey": "greyscale", "gray": "greyscale",
-            "mono": "bw", "black-white": "bw", "blackwhite": "bw"}
+            "mono": "bw", "black-white": "bw", "blackwhite": "bw",
+            "colorblind": "colourblind", "cb": "colourblind"}
 
 
 def style(name="jmol", **changes) -> Style:

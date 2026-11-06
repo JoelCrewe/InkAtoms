@@ -24,16 +24,21 @@ def _pair_key(key):
 NONMETALS = frozenset("H He B C N O F Ne Si P S Cl Ar Ge As Se Br Kr Sb Te I Xe At Rn".split())
 
 
-def cutoff_matrix(species, cutoffs=None, scale=1.15, metal_scale=1.0):
+def cutoff_matrix(species, cutoffs=None, scale=1.15, metal_scale=None):
     """Cutoff (Å) for every pair of species.
 
-    Default: scale x (covalent radius a + covalent radius b), or metal_scale x
-    the sum for metal-metal pairs (metal covalent radii are already generous,
-    so e.g. the 3.16 Å Mo-Mo contacts in MoS2 are not bonds but the 2.7 Å
-    Mo3 triangles are). Entries in `cutoffs` override pairs, keyed "Mo-S",
-    ("Mo", "S") or frozenset; use 0 to switch a pair off.
+    Default: scale x (covalent radius a + covalent radius b). Metal-metal
+    pairs use metal_scale instead, because metal covalent radii are already
+    generous: 1.0 in metals and alloys, and 0.92 when non-metals other than H
+    are present (compounds), so cation-cation contacts in oxides and
+    sulfides (rutile Ti-Ti 2.96 Å, MoS2 Mo-Mo 3.16 Å) are not bonds while
+    real metal-metal bonds (Mo3 triangles, 2.7 Å) are. Entries in `cutoffs`
+    override pairs, keyed "Mo-S", ("Mo", "S") or frozenset; 0 switches a pair off.
     """
     species = list(species)
+    if metal_scale is None:
+        compound = any(s in NONMETALS and s != "H" for s in species)
+        metal_scale = 0.92 if compound else 1.0
     cov = np.array([DATA[s][0] for s in species])
     metal = np.array([s not in NONMETALS for s in species])
     factor = np.where(metal[:, None] & metal[None, :], metal_scale, scale)
@@ -47,7 +52,7 @@ def cutoff_matrix(species, cutoffs=None, scale=1.15, metal_scale=1.0):
     return mat
 
 
-def find_bonds(atoms, cutoffs=None, scale=1.15, pbc=None, metal_scale=1.0):
+def find_bonds(atoms, cutoffs=None, scale=1.15, pbc=None, metal_scale=None):
     """Find bonded pairs.
 
     Returns (i, j, shift): row indices into the structure and, for each bond,
@@ -150,6 +155,88 @@ def bond_orders(atoms, bonds=None, limits=None):
         elif double is not None and d[k] <= double:
             orders[k] = 2
     return orders
+
+
+def find_hbonds(atoms, bonds=None, *, max_ha=2.5, min_angle=120.0, donors=("N", "O", "F"),
+                acceptors=("N", "O", "F")):
+    """Hydrogen bonds D-H...A as (row of H, row of A) pairs.
+
+    H must be covalently bonded to a donor; H...A within max_ha (Å) and the
+    D-H...A angle at least min_angle (degrees). Periodic images are ignored.
+    """
+    s = as_structure(atoms)
+    i, j, shift = find_bonds(s) if bonds is None else bonds
+    sym = s.symbols
+    acc_rows = np.flatnonzero(np.isin(sym, acceptors))
+    if len(acc_rows) == 0:
+        return []
+    tree = cKDTree(s.positions[acc_rows])
+    pairs = []
+    for a, b, t in zip(i, j, shift):
+        if t.any():
+            continue
+        for h, d in ((a, b), (b, a)):
+            if sym[h] != "H" or sym[d] not in donors:
+                continue
+            for q in tree.query_ball_point(s.positions[h], max_ha):
+                acc = acc_rows[q]
+                if acc == d:
+                    continue
+                v1 = s.positions[d] - s.positions[h]
+                v2 = s.positions[acc] - s.positions[h]
+                dist = np.linalg.norm(v2)
+                if dist < 1.3:
+                    continue
+                ang = np.degrees(np.arccos(np.clip(v1 @ v2 / (np.linalg.norm(v1) * dist), -1, 1)))
+                if ang >= min_angle:
+                    pairs.append((int(h), int(acc)))
+    return pairs
+
+
+def find_rings(atoms, bonds=None, *, max_size=8, include_h=False):
+    """Small rings as lists of row indices in ring order (the shortest ring
+    through each bond, so fused rings come out separately)."""
+    s = as_structure(atoms)
+    i, j, shift = find_bonds(s) if bonds is None else bonds
+    keep = ~shift.any(axis=1)
+    if not include_h:
+        keep &= (s.symbols[i] != "H") & (s.symbols[j] != "H")
+    nbrs = {}
+    for a, b in zip(i[keep], j[keep]):
+        nbrs.setdefault(int(a), set()).add(int(b))
+        nbrs.setdefault(int(b), set()).add(int(a))
+    rings, seen = [], set()
+    for a, b in zip(i[keep], j[keep]):
+        a, b = int(a), int(b)
+        # shortest path a -> b that does not use the a-b bond
+        prev = {a: None}
+        queue = [a]
+        found = False
+        while queue and not found:
+            nxt = []
+            for u in queue:
+                for w in nbrs.get(u, ()):
+                    if (u == a and w == b) or w in prev:
+                        continue
+                    prev[w] = u
+                    if w == b:
+                        found = True
+                        break
+                    nxt.append(w)
+                if found:
+                    break
+            queue = nxt
+            if len(prev) > 4000:
+                break
+        if not found:
+            continue
+        path = [b]
+        while prev[path[-1]] is not None:
+            path.append(prev[path[-1]])
+        if len(path) <= max_size and frozenset(path) not in seen:
+            seen.add(frozenset(path))
+            rings.append(path[::-1])
+    return rings
 
 
 def coordination(atoms, **kwargs):

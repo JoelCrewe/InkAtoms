@@ -107,7 +107,89 @@ def tile(atoms, reps=(3, 3, 1), *, centred=True):
     copy_no = np.empty(k, int)
     copy_no[[home] + [q for q in range(k) if q != home]] = np.arange(k)
     ids = (s.ids[None, :] + copy_no[:, None] * stride).reshape(-1)
-    return Structure(np.tile(s.symbols, k), pos, cell=cell, pbc=s.pbc, ids=ids, origin=origin)
+    arrays = {key: np.concatenate([v] * k) for key, v in s.arrays.items()}
+    occ = None if s.occupancy is None else tuple(s.occupancy) * k
+    return Structure(np.tile(s.symbols, k), pos, cell=cell, pbc=s.pbc, ids=ids, origin=origin,
+                     arrays=arrays, occupancy=occ, bond_orders=s.bond_orders)
+
+
+def images(atoms, width=1.5, *, tol=1e-3):
+    """Add the periodic images that lie within width (Å) outside the cell.
+
+    The added atoms are marked in arrays["_image"] (draw() fades them as
+    ghosts) and get new ids (id + k * stride). width=0 gives VESTA-style
+    boundary atoms: only the copies of atoms sitting on cell faces, edges
+    and corners.
+    """
+    s = as_structure(atoms)
+    if s.cell is None:
+        raise ValueError("images needs a structure with a unit cell")
+    inv = np.linalg.inv(s.cell)
+    frac = (s.positions - s.origin) @ inv
+    # width in fractional units along each axis (distance between opposite faces)
+    vol = abs(np.linalg.det(s.cell))
+    heights = np.array([vol / np.linalg.norm(np.cross(s.cell[(k + 1) % 3], s.cell[(k + 2) % 3]))
+                        for k in range(3)])
+    fw = (width + tol) / heights
+    reach = [range(-1, 2) if s.pbc[k] else range(0, 1) for k in range(3)]
+    stride = int(s.ids.max()) + 1 if len(s) else 0
+    parts, copy_no = [], 1
+    for shift in itertools.product(*reach):
+        shift = np.array(shift)
+        if not shift.any():
+            continue
+        f = frac + shift
+        inside = np.all((f >= -fw) & (f <= 1 + fw), axis=1)
+        if inside.any():
+            sub = s[inside]
+            parts.append(sub.copy(positions=sub.positions + shift @ s.cell,
+                                  ids=sub.ids + copy_no * stride))
+        copy_no += 1
+    base = s.copy(arrays={**s.arrays, "_image": np.zeros(len(s), bool)})
+    for part in parts:
+        base = base.concat(part.copy(arrays={**part.arrays, "_image": np.ones(len(part), bool)}))
+    return base.copy(pbc=False)
+
+
+def boundary(atoms, tol=1e-3):
+    """VESTA-style boundary atoms: repeat atoms on cell faces, edges and corners."""
+    return images(atoms, width=0.0, tol=tol)
+
+
+def make_whole(atoms, **bond_kwargs):
+    """Unwrap molecules split by the periodic boundary so each bonded cluster is
+    drawn in one piece (cluster centres stay inside the cell where possible)."""
+    s = as_structure(atoms)
+    if s.cell is None or not s.pbc.any():
+        return s
+    from .bonds import find_bonds
+
+    i, j, shift = find_bonds(s, **bond_kwargs)
+    nbrs = [[] for _ in range(len(s))]
+    for a, b, t in zip(i, j, shift):
+        nbrs[a].append((b, t))
+        nbrs[b].append((a, -t))
+    image = np.zeros((len(s), 3), int)
+    seen = np.zeros(len(s), bool)
+    for start in range(len(s)):
+        if seen[start]:
+            continue
+        seen[start] = True
+        stack, members = [start], [start]
+        while stack:
+            a = stack.pop()
+            for b, t in nbrs[a]:
+                if not seen[b]:
+                    seen[b] = True
+                    image[b] = image[a] + t
+                    stack.append(b)
+                    members.append(b)
+        # shift the whole cluster so its centre sits in the home cell
+        members = np.array(members)
+        centre = (s.positions[members] + image[members] @ s.cell).mean(axis=0)
+        cfrac = (centre - s.origin) @ np.linalg.inv(s.cell)
+        image[members] -= np.floor(cfrac).astype(int) * s.pbc
+    return s.copy(positions=s.positions + image @ s.cell)
 
 
 def drop_unbonded(atoms, min_bonds=1, **bond_kwargs):

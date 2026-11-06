@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "inkatoms"
-version = "0.1.0"
+version = "0.2.0"
 description = "Elegant vector ball-and-stick drawings of atomic structures in matplotlib"
 readme = "README.md"
 license = "MIT"
@@ -19,10 +19,17 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 
+[project.scripts]
+inkatoms = "inkatoms.cli:main"
+
 [project.optional-dependencies]
 ase = ["ase>=3.22"]
 pymatgen = ["pymatgen"]
-dev = ["pytest", "ase>=3.22"]
+rdkit = ["rdkit"]
+mdanalysis = ["MDAnalysis"]
+all = ["ase>=3.22", "pymatgen", "rdkit", "MDAnalysis", "pillow"]
+dev = ["pytest", "pytest-mpl", "ase>=3.22", "rdkit", "MDAnalysis", "pillow"]
+docs = ["sphinx", "sphinx-gallery", "furo", "ase>=3.22", "rdkit", "pillow"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/inkatoms"]
