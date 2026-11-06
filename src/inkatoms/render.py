@@ -144,6 +144,9 @@ class _Scene:
             self.far, self.near = min(depth_range), max(depth_range)
         else:
             self.far, self.near = float(depth.min()), float(depth.max())
+            if st.fade_distance:
+                # a fixed fade length, so small and large structures fade alike
+                self.far = self.near - float(st.fade_distance)
         self.items = []
         self.extent = []
 
@@ -367,7 +370,7 @@ def _plane_polygon(cell, origin, hkl, offset=1.0):
 # ---------------------------------------------------------------- draw
 
 def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
-         style="jmol", mode="ballstick",
+         style="jmol", mode="ballstick", depth_cue=True,
          color_by=None, cmap="viridis", vmin=None, vmax=None, norm=None,
          highlight=None, highlight_front=False,
          bonds=True, cutoffs=None, bond_scale=1.15, bond_orders=False, pbc_bonds=None,
@@ -394,6 +397,8 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
       style        jmol | cpk | vesta | colourblind | greyscale | bw | dark, or a Style;
                    extra keyword arguments change style fields (shading="soft", ...)
       mode         ballstick | spacefill | sticks
+      depth_cue    False draws every atom at full colour and size (no fade, no
+                   shrink); the style's depth_fade / depth_shrink tune it when on
       color_by     colour atoms by a value: "z", "coordination", an array name
                    ("charges", "forces", ...) or an array; cmap, vmin, vmax, norm as
                    in matplotlib; then inkatoms.colorbar(artist)
@@ -401,7 +406,9 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
                    highlight_front=True keeps them on top of everything
 
     Bonds
-      bonds, cutoffs, bond_scale   cutoffs={"Mo-S": 2.85} overrides pairs (Å)
+      bonds, cutoffs, bond_scale   bonds=True finds bonds (cutoffs={"Mo-S": 2.85}
+                   overrides pairs, in Å), False draws none, or give an explicit list
+                   of bonded id pairs [(id_a, id_b), ...] to draw exactly those
       bond_orders  True guesses double/triple bonds (or uses known RDKit orders),
                    or {(id_a, id_b): order}; order 1.5 is drawn as solid + dashed
       bond_styles  {(id_a, id_b): "breaking" | "forming" | "dashed" | "hidden" or
@@ -434,6 +441,8 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
         raise ValueError(f"mode must be one of {MODES}")
     s = as_structure(atoms)
     st = get_style(style, **style_changes)
+    if not depth_cue:
+        st = st.replace(depth_fade=0.0, depth_shrink=0.0)
 
     # ---- periodic images
     if ghosts or boundary:
@@ -506,7 +515,7 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
         r = rr[a]
         fade = fade_atom[a]
         face = base[a]
-        edge_rule = st.atom_edgecolor
+        edge_rule = st.edge_colors.get(s.symbols[a], st.atom_edgecolor)
         if hl[a] and st.highlight_edgecolor is not None:
             edge_rule = st.highlight_edgecolor
         edge = edge_of(face, edge_rule, st.darken)
@@ -549,9 +558,23 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
                           (0, 0, 0, 0), 0.0, gid=gid)
 
     # ---- bonds (also needed for polyhedra, rings, h-bonds)
-    need_bonds = (bonds and mode != "spacefill") or polyhedra or rings or contacts == "hbonds"
-    bond_list = find_bonds(s, cutoffs=cutoffs, scale=bond_scale, pbc=pbc_bonds) if (need_bonds and n > 1) \
-        else (np.zeros(0, int), np.zeros(0, int), np.zeros((0, 3), int))
+    explicit = not isinstance(bonds, (bool, np.bool_)) and bonds is not None
+    draw_bonds = (explicit or bool(bonds)) and mode != "spacefill"
+    need_bonds = draw_bonds or polyhedra or rings or contacts == "hbonds"
+    if explicit:
+        # an explicit list of bonded id pairs, drawn exactly as given (no periodic shifts)
+        pairs = np.asarray(list(bonds), int).reshape(-1, 2)
+        first = {int(i): r for r, i in reversed(list(enumerate(s.ids)))}
+        missing = [int(x) for x in pairs.ravel() if int(x) not in first]
+        if missing:
+            raise KeyError(f"bonds refer to ids not in the structure: {sorted(set(missing))[:8]}")
+        bi = np.array([first[int(a)] for a in pairs[:, 0]], int)
+        bj = np.array([first[int(b)] for b in pairs[:, 1]], int)
+        bond_list = (bi, bj, np.zeros((len(bi), 3), int))
+    elif need_bonds and n > 1:
+        bond_list = find_bonds(s, cutoffs=cutoffs, scale=bond_scale, pbc=pbc_bonds)
+    else:
+        bond_list = (np.zeros(0, int), np.zeros(0, int), np.zeros((0, 3), int))
     bi, bj, shifts = bond_list
     T = shifts @ s.cell if (s.cell is not None and len(shifts)) else np.zeros((len(bi), 3))
 
@@ -597,7 +620,7 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
                 hidden_pairs.update(frozenset((c, r_)) for r_, _ in ligs)
 
     # ---- bonds
-    if bonds and mode != "spacefill" and len(bi):
+    if draw_bonds and len(bi):
         orders = _resolve_orders(s, bond_orders, bond_list)
         styles_by_ids = {}
         for key, value in (bond_styles or {}).items():

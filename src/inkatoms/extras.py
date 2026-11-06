@@ -14,7 +14,7 @@ def legend_handles(symbols, style="jmol", markersize=9, **style_changes):
     handles = []
     for sym in symbols:
         face = st.color(sym)
-        edge = tuple(edge_of(face, st.atom_edgecolor, st.darken))
+        edge = tuple(edge_of(face, st.edge_colors.get(sym, st.atom_edgecolor), st.darken))
         handles.append(Line2D([], [], ls="none", marker="o", markersize=markersize,
                               markerfacecolor=face, markeredgecolor=edge,
                               markeredgewidth=max(st.atom_edgewidth, 0.6), label=sym))

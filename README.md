@@ -69,11 +69,16 @@ ordinary matplotlib annotation works: `ax.annotate("site", xy=art.xy(12), ...)`.
 | `bw`          | black-and-white line art |
 | `dark`        | Jmol colours on a dark background |
 
+Depth cueing is on by default; `depth_cue=False` draws every atom at full colour
+and size, and `fade_distance=6` fades over a fixed 6 Å instead of the whole depth
+of the drawing (so small and large structures fade alike).
+
 Any style field can be changed in the call:
 
 ```python
 ia.draw(ax, atoms, style="cpk", shading="glossy", depth_fade=0.4,
-        colors={"Mo": "#54b5b5"}, bond_color="#777777", occlusion=0.8)
+        colors={"Mo": "#54b5b5"}, edge_colors={"H": "#1a1a1a"}, bond_color="#777777",
+        occlusion=0.8)
 ```
 
 ![shading and modes](docs/images/shading.png)

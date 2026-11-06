@@ -2,6 +2,8 @@
 
 ## 0.2.0
 
+- `depth_cue=False` switch (and `--no-depth-cue`), `fade_distance=` for a fixed fade
+  length, per-element outline colours (`edge_colors=`), explicit bond lists (`bonds=[(a, b), ...]`)
 - Colour atoms by a value (`color_by=`) with `colorbar()`; per-atom arrows (`vectors=`)
 - Coordination polyhedra, filled rings with aromatic circles, hydrogen-bond contacts,
   bond styles (breaking / forming / dashed / hidden), bond order 1.5 (solid + dashed)

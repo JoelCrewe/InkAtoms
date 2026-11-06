@@ -16,6 +16,7 @@ def build_parser():
     p.add_argument("--style", default="jmol", help="jmol, cpk, vesta, colourblind, greyscale, bw, dark")
     p.add_argument("--mode", default="ballstick", choices=["ballstick", "spacefill", "sticks"])
     p.add_argument("--shading", default=None, choices=["flat", "glossy", "soft"])
+    p.add_argument("--no-depth-cue", action="store_true", help="no fading or shrinking with depth")
     p.add_argument("--perspective", type=float, default=None, help="camera distance in Å")
     p.add_argument("--cell", action="store_true", help="draw the unit cell")
     p.add_argument("--repeat", default=None, help="tile the cell, e.g. 3,3,1")
@@ -53,7 +54,7 @@ def main(argv=None):
     s = as_structure(atoms)
     if args.repeat:
         s = select.tile(s, tuple(int(x) for x in args.repeat.split(",")), centred=False)
-    kw = dict(view=args.view, rotate=args.rotate, style=args.style, mode=args.mode,
+    kw = dict(depth_cue=not args.no_depth_cue, view=args.view, rotate=args.rotate, style=args.style, mode=args.mode,
               perspective=args.perspective, cell=args.cell, boundary=args.boundary,
               bond_orders=args.bond_orders, polyhedra=args.polyhedra or None,
               color_by=args.color_by, cmap=args.cmap, highlight=args.highlight, labels=args.labels)

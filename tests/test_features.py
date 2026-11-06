@@ -299,3 +299,40 @@ def test_cli(tmp_path):
     out = tmp_path / "m.svg"
     cli.main([str(f), "-o", str(out), "--bond-orders", "--style", "cpk", "--legend", "--labels", "symbol"])
     assert out.exists() and out.stat().st_size > 1000
+
+
+def test_explicit_bond_list():
+    fig, ax = plt.subplots()
+    s = (["C", "C", "C"], [[0, 0, 0], [1.5, 0, 0], [6, 0, 0]])
+    art = ia.draw(ax, s, view="z", bonds=[(0, 2)])          # far apart, but bonded because we say so
+    assert n_pieces(art) == 3 + 2
+    with pytest.raises(KeyError):
+        ia.draw(ax, s, bonds=[(0, 9)])
+
+
+def test_fade_distance_is_absolute():
+    fig, ax = plt.subplots()
+    s = (["C", "C"], [[0, 0, 0], [3, 0, 1.0]])          # 1 Å apart in depth
+    rel = ia.draw(ax, s, view="z", bonds=False)
+    absf = ia.draw(ax, s, view="z", bonds=False, fade_distance=10.0)
+    # normalised: the back atom is fully faded; with a 10 Å fade length only a tenth
+    assert rel.radii[0] < absf.radii[0] < absf.radii[1]
+
+
+def test_per_element_edge_colours():
+    fig, ax = plt.subplots()
+    art = ia.draw(ax, ase_build.molecule("H2O"), view="z", bonds=False, depth_fade=0.0,
+                  edge_colors={"H": "#ff0000"})
+    edges = art.collection.get_edgecolor()
+    assert sum(np.allclose(e[:3], (1, 0, 0)) for e in edges) == 2
+
+
+def test_depth_cue_toggle():
+    fig, ax = plt.subplots()
+    s = (["C", "C"], [[0, 0, 0], [3, 0, 2.0]])
+    on = ia.draw(ax, s, view="z", bonds=False)
+    off = ia.draw(ax, s, view="z", bonds=False, depth_cue=False)
+    assert on.radii[0] < on.radii[1]
+    assert np.isclose(off.radii[0], off.radii[1])
+    faces = off.collection.get_facecolor()
+    assert np.allclose(faces[0], faces[1])

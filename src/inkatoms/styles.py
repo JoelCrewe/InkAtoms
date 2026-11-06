@@ -96,6 +96,7 @@ class Style:
     colors: Mapping[str, object] = field(default_factory=dict)  # per-element overrides
     ball_scale: float = 0.27             # ball radius = ball_scale x van der Waals radius
     atom_edgecolor: object = "darker"    # "darker" (of the face colour) or a colour
+    edge_colors: Mapping[str, object] = field(default_factory=dict)  # per-element outline overrides
     atom_edgewidth: float = 0.6          # pt
     bond_color: object = "split"         # "split" (each half takes its atom's colour) or a colour
     bond_width: float = 0.26             # Å
@@ -105,6 +106,8 @@ class Style:
     shading: str = "flat"                # flat | glossy | soft
     depth_fade: float = 0.45             # how far the back fades towards the background (0-1)
     depth_shrink: float = 0.12           # how much smaller the back is drawn (0-1)
+    fade_distance: float | None = None   # Å: fade over this distance behind the front atom
+                                         # (None: from the nearest to the farthest atom)
     background: object = "white"         # colour faded towards
     highlight_edgewidth: float = 1.4     # pt, for highlighted atoms
     highlight_edgecolor: object = None   # None: same rule as atom_edgecolor; or "darker" / a colour
@@ -126,8 +129,9 @@ class Style:
         unknown = set(changes) - {f.name for f in fields(self)}
         if unknown:
             raise TypeError(f"unknown style options: {sorted(unknown)}")
-        if "colors" in changes:
-            changes["colors"] = {**self.colors, **changes["colors"]}
+        for key in ("colors", "edge_colors"):
+            if key in changes:
+                changes[key] = {**getattr(self, key), **changes[key]}
         return replace(self, **changes)
 
 
