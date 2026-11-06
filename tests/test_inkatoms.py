@@ -193,3 +193,17 @@ def test_no_metal_metal_bonds_in_mos2():
     i, j, _ = ia.find_bonds(s)
     assert not np.any((s.symbols[i] == "Mo") & (s.symbols[j] == "Mo"))
     assert (ia.coordination(s)[s.symbols == "Mo"] == 6).all()
+
+
+def test_cutoff_keys_all_forms():
+    sp = ["Mo", "S"]
+    for key in ("Mo-Mo", ("Mo", "Mo"), frozenset(("Mo", "Mo"))):
+        assert ia.cutoff_matrix(sp, {key: 3.1})[0, 0] == 3.1
+    assert ia.cutoff_matrix(sp, {frozenset(("S", "Mo")): 2.85})[0, 1] == 2.85
+
+
+def test_highlight_front_draws_highlight_last():
+    fig, ax = plt.subplots()
+    s = (["C", "O"], [[0, 0, 0], [0, 0, 5]])        # C behind O
+    art = ia.draw(ax, s, view="z", bonds=False, highlight={0: "red"}, highlight_front=True)
+    assert np.allclose(art.collection.get_facecolor()[-1][:3], (1, 0, 0))

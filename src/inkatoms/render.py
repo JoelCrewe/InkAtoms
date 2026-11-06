@@ -95,7 +95,7 @@ def _bond_polygon(a, b, half_width):
 
 
 def draw(ax, atoms, *, view="z", up=None, rotate=None, style="jmol", mode="ballstick",
-         highlight=None, bonds=True, cutoffs=None, bond_scale=1.15, pbc_bonds=None,
+         highlight=None, highlight_front=False, bonds=True, cutoffs=None, bond_scale=1.15, pbc_bonds=None,
          cell=False, radii=None, depth_range=None, autoscale=True, pad=0.5,
          axis_off=True, zorder=2, rasterized=False, **style_changes) -> StructureArtist:
     """Draw a structure on ax.
@@ -108,6 +108,8 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, style="jmol", mode="balls
                 arguments change style fields, e.g. shading="soft", colors={"S": "gold"}
     mode        ballstick | spacefill | sticks
     highlight   atom ids to draw unfaded with a heavier outline, or {id: colour}
+    highlight_front  draw highlighted atoms on top of everything, even atoms nearer
+                the viewer (keeps the atoms a figure is about in sight)
     bonds       draw bonds; cutoffs={"Mo-S": 2.85} overrides pair cutoffs (Å), others
                 are bond_scale x the sum of covalent radii
     pbc_bonds   bonds across periodic boundaries are drawn as half-bonds towards the
@@ -172,13 +174,17 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, style="jmol", mode="balls
         r = rr[a]
         fade = st.depth_fade * (1 - t_atom[a])
         face = base[a]
-        edge = edge_of(face, st.atom_edgecolor, st.darken)
+        edge_rule = st.atom_edgecolor
+        if hl[a] and st.highlight_edgecolor is not None:
+            edge_rule = st.highlight_edgecolor
+        edge = edge_of(face, edge_rule, st.darken)
         lw = (st.highlight_edgewidth if hl[a] else st.atom_edgewidth) * k_atom[a]
         if st.shading == "soft":
             body = mix(face, (0, 0, 0), 0.12)
         else:
             body = face
-        add(depth[a], a, 0, Circle((x, y), r), (*mix(body, bg, fade), 1.0), (*mix(edge, bg, fade), 1.0), lw)
+        da = depth[a] + (1e6 if (highlight_front and hl[a]) else 0.0)
+        add(da, a, 0, Circle((x, y), r), (*mix(body, bg, fade), 1.0), (*mix(edge, bg, fade), 1.0), lw)
         if st.shading == "soft":
             steps = 6
             for k in range(1, steps):
@@ -186,11 +192,11 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, style="jmol", mode="balls
                 rad = r * (1 - 0.82 * f)
                 off = (r - rad) * 0.62
                 c = mix(face, (1, 1, 1), 0.55 * f ** 1.3) if f > 0.3 else face
-                add(depth[a], a, k, Circle((x - off * 0.7071, y + off * 0.7071), rad),
+                add(da, a, k, Circle((x - off * 0.7071, y + off * 0.7071), rad),
                     (*mix(c, bg, fade), 1.0), (0, 0, 0, 0), 0.0)
         elif st.shading == "glossy":
             for k, (offf, radf, alpha) in enumerate(((0.30, 0.30, 0.30), (0.36, 0.13, 0.75)), start=1):
-                add(depth[a], a, k, Circle((x - offf * r, y + offf * r), radf * r),
+                add(da, a, k, Circle((x - offf * r, y + offf * r), radf * r),
                     (1, 1, 1, alpha * (1 - fade)), (0, 0, 0, 0), 0.0)
         elif st.shading != "flat":
             raise ValueError("shading must be flat, glossy or soft")

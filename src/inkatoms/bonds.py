@@ -12,6 +12,8 @@ from .structure import Structure, as_structure
 
 
 def _pair_key(key):
+    if isinstance(key, frozenset):
+        return key          # frozenset({"Mo"}) is the Mo-Mo pair
     if isinstance(key, str):
         a, b = key.replace(" ", "").split("-")
     else:

@@ -86,6 +86,7 @@ class Style:
     depth_shrink: float = 0.12           # how much smaller the back is drawn (0-1)
     background: object = "white"         # colour faded towards
     highlight_edgewidth: float = 1.4     # pt, for highlighted atoms
+    highlight_edgecolor: object = None   # None: same rule as atom_edgecolor; or "darker" / a colour
     highlight_scale: float = 1.0         # radius factor for highlighted atoms
     cell_color: object = "#555555"
     cell_width: float = 0.05             # Å
