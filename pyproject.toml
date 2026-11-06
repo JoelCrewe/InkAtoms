@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "inkatoms"
+version = "0.1.0"
+description = "Elegant vector ball-and-stick drawings of atomic structures in matplotlib"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Joel Crewe" }]
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.22", "matplotlib>=3.6", "scipy>=1.8"]
+keywords = ["matplotlib", "crystal structure", "molecule", "visualisation", "materials"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Framework :: Matplotlib",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+
+[project.optional-dependencies]
+ase = ["ase>=3.22"]
+pymatgen = ["pymatgen"]
+dev = ["pytest", "ase>=3.22"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/inkatoms"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
