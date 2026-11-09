@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+- Trajectories: `as_frames`, `track`, `unwrap`, `mobile`
+- Events: `find_events` / `find_reactions` (debounced bond changes, insertions and
+  removals), `group_reactions`, `event_strip`
+- Motion trails: `draw(..., trails=dict(frames=, ids=, color="time"))`
+- Comparisons: `kabsch`, `match` (ids / distance / environment / hybrid), `compare`,
+  `draw_comparison`
+- `inkatoms.ml`: radial fingerprints, SOAP (dscribe), `environment_states`,
+  `environment_events`
+- Renderer split into scene.py / layers.py / render.py; per-atom `_fade`, `_layer`,
+  `_scale` overrides; `vectors_front=`
+
 ## 0.2.0
 
 - `layers=` draw order by element; `use_collection_faces()` fixes bold Helvetica on

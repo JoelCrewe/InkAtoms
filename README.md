@@ -155,6 +155,32 @@ matplotlib before 3.11 reads only the regular face of macOS's Helvetica
 collection, so `fontweight="bold"` silently prints regular. `ia.use_collection_faces()`
 registers the other faces (from a local cache) and bold works again.
 
+## Trajectories: events, trails and comparisons
+
+```python
+frames = ase.io.read("md.xyz", ":")                 # atoms carry a persistent "uid" array
+
+# bonds that form and break (a change counts once it lasts min_frames), grouped into reactions
+rx = ia.find_reactions(frames, cutoffs={"Mo-S": 2.85, "S-H": 1.8}, only=[2491], min_frames=5)[0]
+print(rx)         # 196.60 ps  S–H forms (atom added) ... 215.40 ps  Mo–S breaks ...
+ia.event_strip(axes, frames, rx, view="-y")         # one labelled panel per step
+
+# where atoms went: fading, depth-sorted trails
+ia.draw(ax, frames[-1], trails={"frames": frames, "ids": "mobile", "n": 8, "color": "time"})
+
+# how B differs from A: atoms matched (by id, distance, or distance + environment),
+# aligned, B drawn over faint ghosts of A with arrows, coloured by how far atoms moved
+art, cmp = ia.draw_comparison(ax, before, after)
+print(cmp)        # RMSD and the atoms that moved most
+```
+
+Atoms inserted or removed (grand-canonical runs) are reported as "atom added" /
+"removed". `inkatoms.ml` adds local-environment descriptors (a built-in radial
+fingerprint, or SOAP via `pip install "inkatoms[ml]"`), `environment_states` (k-means
+over all frames) and `environment_events`, which find environment changes without
+any bond cutoff; on the MoS3 etching trajectory they pick out the same moments as
+the bond events.
+
 ## Command line
 
 ```bash

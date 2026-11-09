@@ -231,7 +231,7 @@ def _hull_faces(pts):
     return [order(sorted(verts), normal) for normal, verts in groups.values()]
 
 
-def _arrow(scene, p0, p1, width, colour, fade, group, order, depth=None, gid=None):
+def _arrow(scene, p0, p1, width, colour, fade, group, order, depth=None, gid=None, layer=None):
     xy, d, f = scene.project(np.array([p0, p1]))
     a, b = xy
     vec = b - a
@@ -249,9 +249,9 @@ def _arrow(scene, p0, p1, width, colour, fade, group, order, depth=None, gid=Non
     face = scene.rgba(colour, fade)
     if np.hypot(*(neck - a)) > 1e-6:
         scene.add(dd, group, order, _poly(_bond_polygon(a, neck, 0.5 * w)),
-                  face, (0, 0, 0, 0), 0.0, gid=gid)
+                  face, (0, 0, 0, 0), 0.0, gid=gid, layer=layer)
     scene.add(dd, group, order + 1, _poly([b, neck + perp * head_w / 2, neck - perp * head_w / 2]),
-              face, (0, 0, 0, 0), 0.0, gid=gid)
+              face, (0, 0, 0, 0), 0.0, gid=gid, layer=layer)
     scene.extent.extend([a, b])
 
 

@@ -56,6 +56,28 @@ Volumetric data
 .. autofunction:: inkatoms.sample_plane
 .. autofunction:: inkatoms.read_cube
 
+Trajectories, events and comparisons
+------------------------------------
+
+.. autofunction:: inkatoms.as_frames
+.. autofunction:: inkatoms.track
+.. autofunction:: inkatoms.unwrap
+.. autofunction:: inkatoms.mobile
+.. autofunction:: inkatoms.find_events
+.. autofunction:: inkatoms.find_reactions
+.. autofunction:: inkatoms.group_reactions
+.. autofunction:: inkatoms.event_strip
+.. autofunction:: inkatoms.compare
+.. autofunction:: inkatoms.match
+.. autofunction:: inkatoms.kabsch
+.. autofunction:: inkatoms.draw_comparison
+
+Machine-learning extras
+-----------------------
+
+.. automodule:: inkatoms.ml
+   :members: fingerprints, soap, descriptors, environment_states, environment_events
+
 Fonts
 -----
 

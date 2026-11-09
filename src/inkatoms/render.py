@@ -103,7 +103,8 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
          highlight=None, highlight_front=False, layers=None,
          bonds=True, cutoffs=None, bond_scale=1.15, bond_orders=False, pbc_bonds=None,
          bond_styles=None, contacts=None,
-         vectors=None, vector_scale=1.0, vector_color="#c0392b", vector_width=0.07,
+         vectors=None, vector_scale=1.0, vector_color="#c0392b", vector_width=0.07, vectors_front=False,
+         trails=None,
          polyhedra=None, rings=None,
          labels=None, label_kw=None, constraints=None, vacancies=None,
          ghosts=None, boundary=False,
@@ -149,7 +150,10 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
 
     Extras
       vectors      per-atom arrows: array (N, 3) or an array name ("forces"),
-                   scaled by vector_scale; vector_color ("atom" for element colour)
+                   scaled by vector_scale; vector_color ("atom" for element colour);
+                   vectors_front=True draws them over everything
+      trails       motion trails from a trajectory: dict(frames=, ids=[...] | "mobile",
+                   n=, smooth=, color="atom" | "time" | colour, width=, fade=)
       polyhedra    True (metal-centred) or dict(centers=, ligands=, alpha=, color=,
                    edgecolor=, hide_bonds=, min_ligands=)
       rings        True or dict(color=, alpha=, aromatic="auto"|True|False, max_size=)
@@ -184,6 +188,8 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
     is_image = np.asarray(s.arrays.get("_image", np.zeros(len(s), bool)), bool)
     ghost_fade = 0.6 if ghosts else 0.0
     extra_fade = np.where(is_image, ghost_fade, 0.0)
+    if "_fade" in s.arrays:              # per-atom extra fade, e.g. the ghosts of a comparison
+        extra_fade = np.maximum(extra_fade, np.asarray(s.arrays["_fade"], float))
 
     if isinstance(view, str) and view == "auto":
         view = auto_view(s.positions)
@@ -202,9 +208,13 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
         r3 = st.ball_scale * vdw
     for sym, rad in (radii or {}).items():
         r3[s.symbols == sym] = rad
+    if "_scale" in s.arrays:             # per-atom radius factor (e.g. comparison ghosts)
+        r3 = r3 * np.asarray(s.arrays["_scale"], float)
 
-    if layers:
-        scene.atom_layer = np.array([layers.get(sym, 0) for sym in s.symbols], float)
+    if layers or "_layer" in s.arrays:
+        scene.atom_layer = np.array([(layers or {}).get(sym, 0) for sym in s.symbols], float)
+        if "_layer" in s.arrays:         # per-atom layer offsets
+            scene.atom_layer = scene.atom_layer + np.asarray(s.arrays["_layer"], float)
     hl, hl_colours = _highlight(s, highlight)
     xy, depth, f_atom = scene.project(s.positions) if n else (np.zeros((0, 2)), np.zeros(0), np.zeros(0))
     t_atom = np.where(hl, 1.0, scene.t(depth))
@@ -246,7 +256,8 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
     _layers.bonds(ctx, bond_orders=bond_orders, bond_styles=bond_styles)
     _layers.contacts(ctx, contacts)
     _layers.rings(ctx, rings)
-    _layers.vectors(ctx, vectors, vector_scale, vector_color, vector_width)
+    _layers.vectors(ctx, vectors, vector_scale, vector_color, vector_width, vectors_front)
+    _layers.trails(ctx, trails)
     _layers.vacancies(ctx, vacancies)
     _layers.cell(ctx, cell=cell, cell_vectors=cell_vectors, planes=planes)
     extras = ctx.extras

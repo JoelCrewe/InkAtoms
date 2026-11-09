@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "inkatoms"
-version = "0.2.0"
+version = "0.3.0.dev0"
 description = "Elegant vector drawings of atomic structures in matplotlib"
 readme = "README.md"
 license = "MIT"
@@ -34,7 +34,8 @@ ase = ["ase>=3.22"]
 pymatgen = ["pymatgen"]
 rdkit = ["rdkit"]
 mdanalysis = ["MDAnalysis"]
-all = ["ase>=3.22", "pymatgen", "rdkit", "MDAnalysis", "pillow"]
+ml = ["dscribe", "ase>=3.22"]
+all = ["ase>=3.22", "pymatgen", "rdkit", "MDAnalysis", "pillow", "dscribe"]
 dev = ["pytest", "pytest-mpl", "ase>=3.22", "rdkit", "MDAnalysis", "pillow"]
 docs = ["sphinx", "sphinx-gallery", "furo", "ase>=3.22", "rdkit", "pillow"]
 

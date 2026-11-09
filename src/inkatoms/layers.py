@@ -310,7 +310,7 @@ def rings(ctx, rings=None):
                           scene.rgba(edge_of(ring_rgb, "darker", 0.35), fade), 1.0, gid="ring")
 
 
-def vectors(ctx, vectors=None, vector_scale=1.0, vector_color="#c0392b", vector_width=0.07):
+def vectors(ctx, vectors=None, vector_scale=1.0, vector_color="#c0392b", vector_width=0.07, front=False):
     """Per-atom arrows."""
     s, scene, n, fade_atom, base = ctx.s, ctx.scene, ctx.n, ctx.fade_atom, ctx.base
     if vectors is not None:
@@ -324,7 +324,7 @@ def vectors(ctx, vectors=None, vector_scale=1.0, vector_color="#c0392b", vector_
             colour = base[a] if (isinstance(vector_color, str) and vector_color == "atom") \
                 else np.array(to_rgb(vector_color))
             _arrow(scene, s.positions[a], s.positions[a] + vv, vector_width, colour, fade_atom[a],
-                   a, 60, gid=f"vector-{s.ids[a]}")
+                   a, 60, gid=f"vector-{s.ids[a]}", layer=1e9 if front else None)
 
 
 def vacancies(ctx, vacancies=None):
@@ -384,3 +384,62 @@ def cell(ctx, cell=False, cell_vectors=False, planes=None):
                   (*colour, min(1.0, alpha + 0.4)), 0.8, gid=f"plane-{''.join(map(str, spec['hkl']))}")
         scene.extent.extend(pxy)
     ctx.extras = extras
+
+
+def trails(ctx, trails=None):
+    """Motion trails: the recent path of chosen atoms, fading with age.
+
+    trails = dict(frames=[...],          # trajectory frames (same coordinates as the drawing)
+                  ids=[...] | "mobile",  # atoms to trail ("mobile": the n that move most)
+                  n=8, id_key="uid",     # how many mobile atoms; per-atom id array in the frames
+                  smooth=3,              # moving-average window (frames) against thermal jitter
+                  color="atom",          # "atom", "time" (colormap by time) or a colour
+                  cmap="viridis", width=0.08, fade=0.85)   # width in Å; how much the oldest part fades
+    """
+    if not trails:
+        return
+    from matplotlib import colormaps
+
+    from .trajectory import as_frames, mobile, smooth, track, unwrap
+
+    s, st, scene, base = ctx.s, ctx.st, ctx.scene, ctx.base
+    spec = dict(trails)
+    structs, _ = as_frames(spec["frames"], ids=spec.get("id_key", "uid"))
+    ids = spec.get("ids", "mobile")
+    if isinstance(ids, str) and ids == "mobile":
+        ids = mobile(structs, n=spec.get("n", 8), symbols=spec.get("symbols"), among=s.ids)
+    ids = [int(i) for i in np.atleast_1d(ids)]
+    paths = track(structs, ids)
+    cell0 = structs[0].cell
+    if cell0 is not None and structs[0].pbc.any():
+        paths = unwrap(paths, cell0, structs[0].pbc)
+    paths = np.stack([smooth(paths[:, k], spec.get("smooth", 3)) for k in range(len(ids))], axis=1)
+    n_f = len(paths)
+    colour_mode = spec.get("color", "atom")
+    cmap = colormaps[spec.get("cmap", "viridis")]
+    width, fade_old = spec.get("width", 0.08), spec.get("fade", 0.85)
+    row_of = {int(i): r for r, i in enumerate(s.ids)}
+    sym_of = {}
+    for fr in structs:
+        sym_of.update(zip(map(int, fr.ids), fr.symbols))
+    for k, atom_id in enumerate(ids):
+        if isinstance(colour_mode, str) and colour_mode == "atom":
+            fixed = base[row_of[atom_id]] if atom_id in row_of else np.array(st.color(sym_of[atom_id]))
+        elif isinstance(colour_mode, str) and colour_mode == "time":
+            fixed = None
+        else:
+            fixed = np.array(to_rgb(colour_mode))
+        for f in range(n_f - 1):
+            p0, p1 = paths[f, k], paths[f + 1, k]
+            if not (np.isfinite(p0).all() and np.isfinite(p1).all()):
+                continue
+            q, d, fq = scene.project(np.array([p0, p1]))
+            poly = _bond_polygon(q[0], q[1], 0.5 * width * float(scene.k(scene.t(d.mean()))) * float(fq.mean()))
+            if poly is None:
+                continue
+            age = (n_f - 2 - f) / max(n_f - 2, 1)          # 0 for the newest segment
+            colour = fixed if fixed is not None else np.array(cmap(f / max(n_f - 2, 1))[:3])
+            alpha = 1.0 - fade_old * age
+            scene.add(d.mean(), -1, 0, _poly(poly), scene.rgba(colour, float(scene.fade(scene.t(d.mean()))), alpha),
+                      (0, 0, 0, 0), 0.0, gid=f"trail-{atom_id}")
+            scene.extent.extend(q)
