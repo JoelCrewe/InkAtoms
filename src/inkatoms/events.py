@@ -9,6 +9,7 @@ not reported as chemistry.
 
 from __future__ import annotations
 
+import textwrap
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -201,7 +202,7 @@ def _pick_frames(reaction, n_panels, lead, settle, n_frames):
 
 
 def event_strip(axes, frames, reaction, *, ids="uid", around=7.0, lead=10, settle=2, view="z",
-                time_unit="ps", labels=True, show_broken=True, highlight=True, fontsize=8,
+                time_unit="ps", labels=True, show_broken=True, highlight=True, fontsize=8, wrap=18,
                 **draw_kwargs):
     """Draw a reaction as a strip of panels: the state before it, then each step.
 
@@ -210,6 +211,7 @@ def event_strip(axes, frames, reaction, *, ids="uid", around=7.0, lead=10, settl
     lead        frames before the first event for the starting panel
     settle      frames after each event to show its new state
     show_broken draw bonds that just broke as dashed contacts
+    wrap        wrap panel titles at this many characters (None: no wrapping)
     Other keyword arguments go to draw() (style, cutoffs, depth_cue, ...); the same
     view, depth fade and framing are used in every panel.
     Returns (artists, frame_indices).
@@ -254,8 +256,10 @@ def event_strip(axes, frames, reaction, *, ids="uid", around=7.0, lead=10, settl
         ax.set_ylim(b[:, 2].min() - pad, b[:, 3].max() + pad)
     if labels:
         for k, (ax, (f, evs)) in enumerate(zip(axes, picks)):
-            title = "before" if not evs else "\n".join(dict.fromkeys(e.label for e in evs))
-            ax.set_title(f"({_roman(k + 1)}) {title}", fontsize=fontsize, loc="left")
+            steps = ["before"] if not evs else list(dict.fromkeys(e.label for e in evs))
+            if wrap:
+                steps = [textwrap.fill(x, wrap) for x in steps]
+            ax.set_title(f"({_roman(k + 1)}) " + "\n".join(steps), fontsize=fontsize, loc="left")
             t = f"{times[f]:.1f} {time_unit}" if times is not None else f"frame {f}"
             ax.text(0.98, 0.98, t, transform=ax.transAxes, ha="right", va="top", fontsize=fontsize - 1,
                     color="#777777")

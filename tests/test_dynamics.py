@@ -160,3 +160,9 @@ def test_soap_if_available():
     pytest.importorskip("dscribe")
     d = ml.soap(ia.as_structure(ase.build.molecule("H2O")))
     assert d.shape[0] == 3 and d.shape[1] > 10
+
+
+def test_debounced_environment_series():
+    st = ml.EnvironmentStates(ids=[7], labels=np.array([[0], [0], [1], [0], [0], [2], [2], [2]]),
+                              centroids=np.zeros((3, 1)), times=None)
+    assert list(st.debounced(7, 3)) == [0, 0, 0, 0, 0, 2, 2, 2]

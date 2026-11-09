@@ -83,6 +83,19 @@ class EnvironmentStates:
     def series(self, atom_id):
         return self.labels[:, self.ids.index(int(atom_id))]
 
+    def debounced(self, atom_id, min_frames=5):
+        """The state series with flicker removed: a change only takes effect once
+        the new state has lasted min_frames frames (as environment_events counts it)."""
+        from .events import _debounced_changes
+
+        raw = self.series(atom_id)
+        out = np.full_like(raw, -1)
+        changes = [(0, raw[0])] + [(f, new) for f, _, new in _debounced_changes(raw, min_frames)]
+        for (f0, state), (f1, _) in zip(changes, changes[1:] + [(len(raw), None)]):
+            out[f0:f1] = state
+        out[raw < 0] = -1
+        return out
+
 
 def environment_states(frames, ids, *, n_states=4, method="fingerprint", id_key="uid", species=None,
                        seed=0, **kwargs):
