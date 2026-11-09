@@ -8,7 +8,7 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 from ._elements import DATA
-from .structure import Structure, as_structure
+from .structure import as_structure
 
 
 def _pair_key(key):

@@ -8,7 +8,7 @@
     ia.legend(ax, art)
 """
 
-from . import select
+from . import layers, scene, select
 from .annotate import measure
 from .bonds import (ORDER_LIMITS, bond_orders, coordination, cutoff_matrix, find_bonds, find_hbonds,
                     find_rings)

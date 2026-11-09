@@ -138,16 +138,16 @@ def test_polyhedra_rutile_octahedra():
     poly = ia.draw(ax, s, view="z", polyhedra={"centers": "Ti"})
     n_ti = int((s.symbols == "Ti").sum())
     assert n_pieces(poly) == plain - n_ti * 6 * 2 + n_ti * 8    # bonds hidden, 8 faces each
-    assert ia.render._hull_faces(np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0],
+    assert ia.scene._hull_faces(np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0],
                                            [0, 0, 1], [0, 0, -1]], float)).__len__() == 8
 
 
 def test_hull_faces_merge_coplanar_and_flat():
     cube = np.array(list(np.ndindex(2, 2, 2)), float)
-    faces = ia.render._hull_faces(cube)
+    faces = ia.scene._hull_faces(cube)
     assert len(faces) == 6 and all(len(f) == 4 for f in faces)
     square = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], float)
-    assert len(ia.render._hull_faces(square)) == 1
+    assert len(ia.scene._hull_faces(square)) == 1
 
 
 def test_rings_and_aromatic_circle():
@@ -192,9 +192,9 @@ def test_constraints_vacancies_ghosts_planes():
 
 def test_plane_polygon_shapes():
     cell, o = np.eye(3), np.zeros(3)
-    assert len(ia.render._plane_polygon(cell, o, (1, 1, 1))) == 3
-    assert len(ia.render._plane_polygon(cell, o, (0, 0, 1), 0.5)) == 4
-    assert len(ia.render._plane_polygon(cell, o, (1, 1, 1), 1.5)) == 6
+    assert len(ia.scene._plane_polygon(cell, o, (1, 1, 1))) == 3
+    assert len(ia.scene._plane_polygon(cell, o, (0, 0, 1), 0.5)) == 4
+    assert len(ia.scene._plane_polygon(cell, o, (1, 1, 1), 1.5)) == 6
 
 
 def test_perspective_and_occlusion():
