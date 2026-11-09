@@ -38,7 +38,8 @@ def _assign(a, b, cost_fn):
     return np.asarray(ra, int)[order], np.asarray(rb, int)[order]
 
 
-def match(a, b, method="auto", *, iterations=4, descriptor="fingerprint", env_weight=1.0):
+def match(a, b, method="auto", *, iterations=4, descriptor="fingerprint", env_weight=1.0, known=None,
+          pairs=None):
     """Pair the atoms of a with those of b; returns (rows_a, rows_b).
 
     method  "ids"       atoms with the same id (persistent ids, e.g. "uid")
@@ -50,8 +51,31 @@ def match(a, b, method="auto", *, iterations=4, descriptor="fingerprint", env_we
             "hybrid"    distance and environment together (env_weight sets the
                         balance): the most robust when atoms moved by about a bond length
             "auto"      ids if most ids are shared, else distance
+    known   {id_a: id_b} pairs you are sure of; they are fixed and the method
+            matches only the remaining atoms
+    pairs   a complete mapping [(id_a, id_b), ...] given by you (no matching done)
     """
     a, b = as_structure(a), as_structure(b)
+    if pairs is not None:
+        known, method = dict(pairs), "known-only"
+    if known:
+        row_a = {int(i): r for r, i in enumerate(a.ids)}
+        row_b = {int(i): r for r, i in enumerate(b.ids)}
+        missing = [k for k, v in known.items() if int(k) not in row_a or int(v) not in row_b]
+        if missing:
+            raise KeyError(f"known pairs refer to ids not present: {missing[:6]}")
+        fa = np.array([row_a[int(k)] for k in known], int)
+        fb = np.array([row_b[int(v)] for v in known.values()], int)
+        if method == "known-only":
+            order = np.argsort(fa)
+            return fa[order], fb[order]
+        rest_a = np.setdiff1d(np.arange(len(a)), fa)
+        rest_b = np.setdiff1d(np.arange(len(b)), fb)
+        ra, rb = match(a[rest_a], b[rest_b], method=method, iterations=iterations, descriptor=descriptor,
+                       env_weight=env_weight)
+        ra, rb = np.concatenate([fa, rest_a[ra]]), np.concatenate([fb, rest_b[rb]])
+        order = np.argsort(ra)
+        return ra[order], rb[order]
     if method == "auto":
         shared = len(set(map(int, a.ids)) & set(map(int, b.ids)))
         method = "ids" if shared >= 0.9 * min(len(a), len(b)) else "distance"
@@ -133,14 +157,18 @@ class Comparison:
         return "\n".join(lines)
 
 
-def compare(a, b, method="auto", *, align=True, align_on=None, **match_kwargs):
+def compare(a, b, method="auto", *, align=True, align_on=None, ids_a=None, ids_b=None, **match_kwargs):
     """Match a's atoms to b's, align a onto b (Kabsch), and return a Comparison.
 
     align_on: ids (in a) to fit the alignment on, e.g. a rigid substrate, so the
     displacement shows how the rest moved relative to it.
+    ids_a, ids_b: which ids identify atoms in each structure: an array, or the name of
+    a per-atom array (e.g. "uid") for ASE input. known= and pairs= go to match().
     """
-    a, b = as_structure(a), as_structure(b)
+    a, b = as_structure(a, ids=ids_a), as_structure(b, ids=ids_b)
     used = method if method != "auto" else None
+    if match_kwargs.get("pairs") is not None:
+        used = "given pairs"
     ra, rb = match(a, b, method=method, **match_kwargs)
     if used is None:
         shared = len(set(map(int, a.ids)) & set(map(int, b.ids)))
@@ -153,23 +181,27 @@ def compare(a, b, method="auto", *, align=True, align_on=None, **match_kwargs):
     return Comparison(a, b, ra, rb, R, t, used)
 
 
-def draw_comparison(ax, a, b, *, comparison=None, method="auto", align=True, align_on=None, ghost=0.65,
+def draw_comparison(ax, a, b, *, comparison=None, method="auto", align=True, align_on=None, ids_a=None,
+                    ids_b=None, known=None, pairs=None, ghost=0.65,
                     ghost_scale=0.8,
-                    arrows=True, arrow_scale=1.0, min_shift=0.15, color_by="shift", cmap="magma_r",
+                    arrows=True, arrow_scale=1.0, arrow_max=None, min_shift=0.15, color_by="shift",
+                    cmap="magma_r",
                     vmin=0.0, vmax=None, arrow_color="#333333", cutoffs=None, bond_scale=1.15, **draw_kwargs):
     """Draw b with a as faint ghosts and arrows showing how each atom moved.
 
     ghost      how far a's atoms fade (0 = as strong as b, 1 = invisible); they are
                drawn behind b and ghost_scale times smaller
     min_shift  shifts below this (Å) get no arrow
+    arrow_scale, arrow_max  arrows are arrow_scale x the shift, capped at arrow_max Å
+               (so one atom that moved far does not swamp small relaxations)
     color_by   "shift" colours b's atoms by how far they moved (with a colorbar via
                inkatoms.colorbar), None keeps element colours
     Other keyword arguments go to draw(). Returns (artist, comparison).
     """
     from .render import draw
 
-    a, b = as_structure(a), as_structure(b)
-    cmp_ = comparison or compare(a, b, method=method, align=align, align_on=align_on)
+    a, b = as_structure(a, ids=ids_a), as_structure(b, ids=ids_b)
+    cmp_ = comparison or compare(a, b, method=method, align=align, align_on=align_on, known=known, pairs=pairs)
     stride = int(max(b.ids.max(), a.ids.max())) + 1
     a_al = a.copy(positions=cmp_.a_aligned, ids=a.ids + stride, arrays={}, occupancy=None, bond_orders=None)
     b_clean = b.copy(arrays={}, occupancy=None)
@@ -186,7 +218,11 @@ def draw_comparison(ax, a, b, *, comparison=None, method="auto", align=True, ali
     vec = np.zeros((len(both), 3))
     if arrows:
         keep = cmp_.shift >= min_shift
-        vec[nb + cmp_.rows_a[keep]] = cmp_.displacement[keep] * arrow_scale
+        arrows_v = cmp_.displacement[keep] * arrow_scale
+        if arrow_max is not None:
+            length = np.linalg.norm(arrows_v, axis=1, keepdims=True)
+            arrows_v = arrows_v * np.minimum(1.0, arrow_max / np.maximum(length, 1e-12))
+        vec[nb + cmp_.rows_a[keep]] = arrows_v
     both = both.copy(arrays={"_fade": fade, "_layer": layer, "_scale": scale, "shift": shift})
     pairs = []
     for part in (b, a_al):

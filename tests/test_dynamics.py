@@ -97,7 +97,7 @@ def test_trails_add_segments():
     fig, ax = plt.subplots()
     last = ia.as_structure(frames[-1], ids="uid")
     plain = len(ia.draw(ax, last, view="z").collection.get_paths())
-    art = ia.draw(ax, last, view="z", trails={"frames": frames, "ids": [3], "smooth": 1})
+    art = ia.draw(ax, last, view="z", trails={"frames": frames, "ids": [3], "smooth": 1, "style": "line"})
     assert len(art.collection.get_paths()) == plain + 39
     art = ia.draw(ax, last, view="z", trails={"frames": frames, "ids": "mobile", "n": 1, "color": "time"})
     assert len(art.collection.get_paths()) > plain
@@ -166,3 +166,88 @@ def test_debounced_environment_series():
     st = ml.EnvironmentStates(ids=[7], labels=np.array([[0], [0], [1], [0], [0], [2], [2], [2]]),
                               centroids=np.zeros((3, 1)), times=None)
     assert list(st.debounced(7, 3)) == [0, 0, 0, 0, 0, 2, 2, 2]
+
+
+def test_event_strip_passes_up_to_draw():
+    frames = dissociation()
+    rx = ia.find_reactions(frames, cutoffs={"S-S": 2.4, "S-H": 1.8}, min_frames=3)[0]
+    fig, axes = plt.subplots(1, 3)
+    arts, _ = ia.event_strip(axes, frames, rx, view="x", up="y", cutoffs={"S-S": 2.4, "S-H": 1.8})
+    assert np.allclose(arts[0].rotation, ia.view_matrix("x", up="y"))
+
+
+@pytest.mark.parametrize("style", ["arrow", "ghosts", "line"])
+def test_trail_styles(style):
+    frames = dissociation()
+    fig, ax = plt.subplots()
+    last = ia.as_structure(frames[-1], ids="uid")
+    plain = len(ia.draw(ax, last, view="z").collection.get_paths())
+    art = ia.draw(ax, last, view="z", trails={"frames": frames, "ids": [3], "style": style, "count": 4})
+    added = len(art.collection.get_paths()) - plain
+    assert added == 4 if style == "ghosts" else added > 2
+
+
+def test_user_controlled_matching():
+    from ase.cluster import Icosahedron
+
+    a = ia.as_structure(Icosahedron("Cu", 2))
+    perm = np.random.default_rng(5).permutation(len(a))
+    b = a.copy(positions=a.positions + 0.05)[perm].copy(ids=np.arange(len(a)) + 900)
+    truth = {int(a.ids[perm[k]]): int(b.ids[k]) for k in range(len(b))}
+    # a complete mapping given by the user is used as is
+    ra, rb = ia.match(a, b, pairs=list(truth.items()))
+    assert {int(a.ids[x]): int(b.ids[y]) for x, y in zip(ra, rb)} == truth
+    # known pairs are kept, the rest matched
+    some = dict(list(truth.items())[:4])
+    ra, rb = ia.match(a, b, method="distance", known=some)
+    got = {int(a.ids[x]): int(b.ids[y]) for x, y in zip(ra, rb)}
+    assert all(got[k] == v for k, v in some.items()) and got == truth
+    with pytest.raises(KeyError):
+        ia.match(a, b, known={12345: 900})
+
+
+def test_neighbour_timeline():
+    frames = dissociation()
+    t, counts = ia.neighbour_counts(frames, 1, cutoffs={"S-S": 2.4, "S-H": 1.8})
+    assert counts["S"][0] == 1 and counts["S"][-1] == 0 and counts["H"][-1] == 1
+    fig, ax = plt.subplots()
+    assert len(ia.plot_neighbours(ax, frames, 1, cutoffs={"S-S": 2.4, "S-H": 1.8}, min_frames=3)) == 2
+    st = ml.environment_states(frames, [1], n_states=2)
+    names = st.describe(frames, cutoffs={"S-S": 2.4, "S-H": 1.8})
+    assert any("1.0 S" in v for v in names.values())
+
+
+def wandering_gas(n_frames=30, n_atoms=12, step=0.25, seed=0):
+    """Atoms on a loose grid taking random steps, with true ids."""
+    rng = np.random.default_rng(seed)
+    base = np.array([[x, y, 0.0] for x in range(4) for y in range(3)], float)[:n_atoms] * 2.2
+    pos = base.copy()
+    frames = []
+    for f in range(n_frames):
+        pos = pos + rng.normal(0, step, pos.shape)
+        a = Atoms("Ar" * n_atoms, positions=pos.copy())
+        a.new_array("uid", np.arange(n_atoms))
+        frames.append(a)
+    return frames
+
+
+def test_link_recovers_ids_and_learned_model():
+    frames = wandering_gas()
+    truth = [ia.as_structure(f, ids="uid") for f in frames]
+    rng = np.random.default_rng(1)
+    perms = [rng.permutation(len(s)) for s in truth]
+    scrambled = [s[p].copy(ids=np.arange(len(s))) for s, p in zip(truth, perms)]
+    shuffled_truth = [s[p] for s, p in zip(truth, perms)]
+    res = ia.link(scrambled, method="distance", max_jump=1.5)
+    assert ia.link_accuracy(res, shuffled_truth) > 0.95
+    model = ia.fit_link_model(frames, per_element=True)
+    assert "Ar" in model and "distance to last position" in str(model)
+    res2 = ia.link(scrambled, method="learned", model=model, max_jump=1.5)
+    assert ia.link_accuracy(res2, shuffled_truth) > 0.95
+
+
+def test_link_new_tracks_when_atoms_jump_too_far():
+    frames = wandering_gas(n_frames=3, step=0.0)
+    frames[2].positions[0] += [20, 0, 0]          # teleports: must start a new track
+    res = ia.link(frames, method="distance", max_jump=1.0, memory=0)
+    assert res.new_tracks == 1 and res.frames[2].ids[0] != res.frames[1].ids[0]

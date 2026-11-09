@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from matplotlib.colors import to_rgb
 
+from ._elements import DATA
 from .bonds import NONMETALS, find_bonds, find_hbonds, find_rings
 from .scene import (DASHED, _MULTI, _NAMED_BOND_STYLES, _arrow, _bond_polygon, _cell_edges, _circle,
                     _dashes, _hull_faces, _plane_polygon, _poly, _resolve_orders, _wedge)
@@ -392,7 +393,10 @@ def trails(ctx, trails=None):
     trails = dict(frames=[...],          # trajectory frames (same coordinates as the drawing)
                   ids=[...] | "mobile",  # atoms to trail ("mobile": the n that move most)
                   n=8, id_key="uid",     # how many mobile atoms; per-atom id array in the frames
-                  smooth=3,              # moving-average window (frames) against thermal jitter
+                  style="arrow",         # "arrow": smoothed dashed route with an arrowhead;
+                                         # "ghosts": faded copies at earlier times (count=5);
+                                         # "line": every step (shows the thermal wiggle too)
+                  smooth=3, points=14,   # line smoothing (frames); points along the arrow route
                   color="atom",          # "atom", "time" (colormap by time) or a colour
                   cmap="viridis", width=0.08, fade=0.85)   # width in Å; how much the oldest part fades
     """
@@ -414,14 +418,16 @@ def trails(ctx, trails=None):
     if cell0 is not None and structs[0].pbc.any():
         paths = unwrap(paths, cell0, structs[0].pbc)
     paths = np.stack([smooth(paths[:, k], spec.get("smooth", 3)) for k in range(len(ids))], axis=1)
-    n_f = len(paths)
     colour_mode = spec.get("color", "atom")
     cmap = colormaps[spec.get("cmap", "viridis")]
-    width, fade_old = spec.get("width", 0.08), spec.get("fade", 0.85)
+    width, fade_old = spec.get("width", 0.1), spec.get("fade", 0.85)
     row_of = {int(i): r for r, i in enumerate(s.ids)}
     sym_of = {}
     for fr in structs:
         sym_of.update(zip(map(int, fr.ids), fr.symbols))
+    style_name = spec.get("style", "arrow")
+    if style_name not in ("arrow", "ghosts", "line"):
+        raise ValueError("trails style must be 'arrow', 'ghosts' or 'line'")
     for k, atom_id in enumerate(ids):
         if isinstance(colour_mode, str) and colour_mode == "atom":
             fixed = base[row_of[atom_id]] if atom_id in row_of else np.array(st.color(sym_of[atom_id]))
@@ -429,17 +435,96 @@ def trails(ctx, trails=None):
             fixed = None
         else:
             fixed = np.array(to_rgb(colour_mode))
-        for f in range(n_f - 1):
-            p0, p1 = paths[f, k], paths[f + 1, k]
-            if not (np.isfinite(p0).all() and np.isfinite(p1).all()):
-                continue
+        if style_name == "line":
+            _trail_line(scene, paths[:, k], fixed, cmap, width, fade_old, atom_id)
+        elif style_name == "arrow":
+            r_end = ctx.r_eff[row_of[atom_id]] if atom_id in row_of else 0.3
+            _trail_arrow(scene, paths[:, k], fixed if fixed is not None else np.array(cmap(1.0)[:3]),
+                         width, spec.get("points", 14), r_end, st, atom_id)
+        else:
+            sym = sym_of[atom_id]
+            radius = (ctx.r_eff[row_of[atom_id]] if atom_id in row_of
+                      else st.ball_scale * DATA[sym][1])
+            _trail_ghosts(scene, paths[:, k], fixed if fixed is not None else np.array(st.color(sym)),
+                          spec.get("count", 5), radius, st, atom_id)
+
+
+def _trail_line(scene, path, fixed, cmap, width, fade_old, atom_id):
+    """Every frame-to-frame step, fading with age (shows the thermal wiggle too)."""
+    n_f = len(path)
+    for f in range(n_f - 1):
+        p0, p1 = path[f], path[f + 1]
+        if not (np.isfinite(p0).all() and np.isfinite(p1).all()):
+            continue
+        q, d, fq = scene.project(np.array([p0, p1]))
+        poly = _bond_polygon(q[0], q[1], 0.5 * width * float(scene.k(scene.t(d.mean()))) * float(fq.mean()))
+        if poly is None:
+            continue
+        age = (n_f - 2 - f) / max(n_f - 2, 1)          # 0 for the newest segment
+        colour = fixed if fixed is not None else np.array(cmap(f / max(n_f - 2, 1))[:3])
+        scene.add(d.mean(), -1, 0, _poly(poly),
+                  scene.rgba(colour, float(scene.fade(scene.t(d.mean()))), 1.0 - fade_old * age),
+                  (0, 0, 0, 0), 0.0, gid=f"trail-{atom_id}")
+        scene.extent.extend(q)
+
+
+def _simplify(path, n_points):
+    """The overall route: heavy smoothing, then n_points evenly spaced along its length."""
+    from .trajectory import smooth
+
+    raw = path[np.isfinite(path).all(axis=1)]
+    if len(raw) < 2:
+        return raw
+    pts = smooth(raw, max(3, len(raw) // 10))
+    pts[0], pts[-1] = raw[0], raw[-1]          # keep the true start and end
+    seg = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+    s = np.concatenate([[0], np.cumsum(seg)])
+    if s[-1] < 1e-6:
+        return pts[:1]
+    targets = np.linspace(0, s[-1], n_points)
+    return np.column_stack([np.interp(targets, s, pts[:, c]) for c in range(3)])
+
+
+def _trail_arrow(scene, path, colour, width, n_points, r_end, st, atom_id):
+    """A smoothed, dashed route with an arrowhead stopping at the atom's surface."""
+    pts = _simplify(path, n_points)
+    if len(pts) < 2:
+        return
+    end_dir = pts[-1] - pts[-2]
+    if np.linalg.norm(end_dir) < 1e-9:
+        return
+    u = end_dir / np.linalg.norm(end_dir)
+    tip = pts[-1] - u * r_end
+    body = np.vstack([pts[:-1], tip])
+    for a, b in zip(body[:-1], body[1:]):
+        for p0, p1 in _dashes(a, b, 2.2 * st.dash_length, 1.6 * st.dash_gap):
             q, d, fq = scene.project(np.array([p0, p1]))
-            poly = _bond_polygon(q[0], q[1], 0.5 * width * float(scene.k(scene.t(d.mean()))) * float(fq.mean()))
-            if poly is None:
-                continue
-            age = (n_f - 2 - f) / max(n_f - 2, 1)          # 0 for the newest segment
-            colour = fixed if fixed is not None else np.array(cmap(f / max(n_f - 2, 1))[:3])
-            alpha = 1.0 - fade_old * age
-            scene.add(d.mean(), -1, 0, _poly(poly), scene.rgba(colour, float(scene.fade(scene.t(d.mean()))), alpha),
-                      (0, 0, 0, 0), 0.0, gid=f"trail-{atom_id}")
-            scene.extent.extend(q)
+            poly = _bond_polygon(q[0], q[1], 0.5 * width * float(fq.mean()))
+            if poly is not None:              # annotations: not faded with depth
+                scene.add(d.mean(), -1, 0, _poly(poly), scene.rgba(colour, 0.0),
+                          (0, 0, 0, 0), 0.0, gid=f"trail-{atom_id}")
+                scene.extent.extend(q)
+    head = 4.0 * width
+    _arrow(scene, tip - u * head, tip, width, colour, 0.0, -1, 1, gid=f"trail-{atom_id}")
+
+
+def _trail_ghosts(scene, path, colour, count, radius, st, atom_id):
+    """Faded copies of the atom at evenly spaced earlier times (stroboscopic)."""
+    good = np.flatnonzero(np.isfinite(path).all(axis=1))
+    if len(good) < 2:
+        return
+    # evenly spaced along the overall route (not in time, and not along the thermal
+    # wiggle), so a long wait in one place does not pile the copies up
+    route = _simplify(path, count + 1)[:-1]
+    pos = path[good]
+    picks = np.unique([good[int(np.argmin(np.linalg.norm(pos - r, axis=1)))] for r in route])
+    edge = edge_of(colour, st.atom_edgecolor, st.darken)
+    for n, f in enumerate(picks):
+        age = 1.0 - n / max(len(picks), 1)          # 1 for the oldest copy
+        q, d, fq = scene.project(path[f][None, :])
+        rad = radius * (0.65 + 0.25 * (1 - age)) * float(fq[0])
+        fade = float(scene.fade(scene.t(d[0])))
+        alpha = 0.18 + 0.42 * (1 - age)
+        scene.add(d[0], -1, 0, _circle(tuple(q[0]), rad), scene.rgba(colour, fade, alpha),
+                  scene.rgba(edge, fade, alpha), 0.4, gid=f"trail-{atom_id}")
+        scene.extent.extend([q[0] - rad, q[0] + rad])

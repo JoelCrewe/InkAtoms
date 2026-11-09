@@ -10,6 +10,13 @@
   `draw_comparison`
 - `inkatoms.ml`: radial fingerprints, SOAP (dscribe), `environment_states`,
   `environment_events`
+- `event_strip` defaults to a publication layout: a slab through the site, a fixed window
+  (`window=`, `anchor=`), role colours for the atom and its bonded partners
+- `plot_neighbours` / `neighbour_counts`: readable timelines; ML states `describe()` themselves
+- Trail styles: "arrow" (smoothed route), "ghosts" (earlier copies), "line"
+- Matching you control: `ids_a=` / `ids_b=`, `known={id_a: id_b}`, `pairs=`; `arrow_max=`
+- Tracking without ids: `link()` (distance / velocity / learned), `fit_link_model()` (per-element
+  logistic regression trained on frames with true ids), `link_accuracy()`
 - Renderer split into scene.py / layers.py / render.py; per-atom `_fade`, `_layer`,
   `_scale` overrides; `vectors_front=`
 

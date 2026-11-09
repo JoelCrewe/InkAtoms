@@ -83,6 +83,25 @@ class EnvironmentStates:
     def series(self, atom_id):
         return self.labels[:, self.ids.index(int(atom_id))]
 
+    def describe(self, frames, *, cutoffs=None, id_key="uid", bond_scale=1.15):
+        """A readable name for each state from the average neighbour counts of the
+        atoms while they are in it, e.g. {0: "1.0 Mo + 2.0 H", ...}."""
+        from .events import neighbour_counts
+
+        sums = {}
+        for k, atom in enumerate(self.ids):
+            _, counts = neighbour_counts(frames, atom, ids=id_key, cutoffs=cutoffs, bond_scale=bond_scale)
+            lab = self.labels[:, k]
+            for state in np.unique(lab[lab >= 0]):
+                m = lab == state
+                for sym, n in counts.items():
+                    sums.setdefault(int(state), {}).setdefault(sym, []).extend(n[m][np.isfinite(n[m])])
+        out = {}
+        for state, per in sorted(sums.items()):
+            parts = [f"{np.mean(v):.1f} {sym}" for sym, v in per.items() if len(v) and np.mean(v) >= 0.05]
+            out[state] = " + ".join(parts) if parts else "isolated"
+        return out
+
     def debounced(self, atom_id, min_frames=5):
         """The state series with flicker removed: a change only takes effect once
         the new state has lasted min_frames frames (as environment_events counts it)."""

@@ -67,6 +67,11 @@ Trajectories, events and comparisons
 .. autofunction:: inkatoms.find_reactions
 .. autofunction:: inkatoms.group_reactions
 .. autofunction:: inkatoms.event_strip
+.. autofunction:: inkatoms.plot_neighbours
+.. autofunction:: inkatoms.neighbour_counts
+.. autofunction:: inkatoms.link
+.. autofunction:: inkatoms.fit_link_model
+.. autofunction:: inkatoms.link_accuracy
 .. autofunction:: inkatoms.compare
 .. autofunction:: inkatoms.match
 .. autofunction:: inkatoms.kabsch

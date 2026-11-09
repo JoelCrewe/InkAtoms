@@ -163,15 +163,24 @@ frames = ase.io.read("md.xyz", ":")                 # atoms carry a persistent "
 # bonds that form and break (a change counts once it lasts min_frames), grouped into reactions
 rx = ia.find_reactions(frames, cutoffs={"Mo-S": 2.85, "S-H": 1.8}, only=[2491], min_frames=5)[0]
 print(rx)         # 196.60 ps  S–H forms (atom added) ... 215.40 ps  Mo–S breaks ...
-ia.event_strip(axes, frames, rx, view="-y")         # one labelled panel per step
+ia.event_strip(axes, frames, rx, view="y", up="-z", window=(16, 19.5))   # a slab through the site,
+                                     # the reacting atoms in role colours, one labelled panel per step
+ia.plot_neighbours(ax, frames, 2491, events=rx.events)    # its Mo / H neighbour counts over time
 
-# where atoms went: fading, depth-sorted trails
-ia.draw(ax, frames[-1], trails={"frames": frames, "ids": "mobile", "n": 8, "color": "time"})
+# where atoms went: style="arrow" (smoothed route), "ghosts" (copies at earlier times) or "line"
+ia.draw(ax, frames[-1], trails={"frames": frames, "ids": [2491], "style": "arrow"})
 
 # how B differs from A: atoms matched (by id, distance, or distance + environment),
 # aligned, B drawn over faint ghosts of A with arrows, coloured by how far atoms moved
-art, cmp = ia.draw_comparison(ax, before, after)
+art, cmp = ia.draw_comparison(ax, start, relaxed, arrow_scale=8, arrow_max=2)
 print(cmp)        # RMSD and the atoms that moved most
+ia.compare(a, b, ids_a="uid", ids_b="uid")          # choose the ids, pin pairs you know with
+ia.compare(a, b, known={12: 40, 13: 41})            # known=, or give the whole mapping with pairs=
+
+# follow atoms with no (or unreliable) ids: frame-to-frame optimal assignment, optionally
+# with a model learned from frames that do have ids
+model = ia.fit_link_model(labelled_frames)          # logistic regression, one model per element
+tracked = ia.link(unlabelled_frames, method="learned", model=model, max_jump=1.5)
 ```
 
 Atoms inserted or removed (grand-canonical runs) are reported as "atom added" /

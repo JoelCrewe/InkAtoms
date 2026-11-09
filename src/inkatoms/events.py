@@ -201,67 +201,136 @@ def _pick_frames(reaction, n_panels, lead, settle, n_frames):
     return picks
 
 
-def event_strip(axes, frames, reaction, *, ids="uid", around=7.0, lead=10, settle=2, view="z",
-                time_unit="ps", labels=True, show_broken=True, highlight=True, fontsize=8, wrap=18,
-                **draw_kwargs):
+def active_colour(colour):
+    """A saturated, darker version of an element colour, for atoms that take part;
+    near-white (H) becomes red, as in the MoS3 paper figures."""
+    import colorsys
+
+    from matplotlib.colors import to_rgb
+
+    r, g, b = to_rgb(colour)
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    if s < 0.15:                     # white / grey: no hue to deepen
+        return (0.91, 0.31, 0.23)
+    return colorsys.hsv_to_rgb(h, min(1.0, s * 1.35 + 0.1), v * 0.78)
+
+
+def event_strip(axes, frames, reaction, *, ids="uid", focus=None, crop="slab", slab=4.0, window=None,
+                anchor=(0.5, 0.5),
+                around=7.0, lead=10, settle=2, view="z", roles=True, role_colors=None, notes=False,
+                time_unit="ps", labels=True, show_broken=True, fontsize=8, wrap=18, **draw_kwargs):
     """Draw a reaction as a strip of panels: the state before it, then each step.
 
     axes        a list/array of Axes (one panel per step plus one for the start)
-    around      crop each frame to atoms within this distance (Å) of the reacting atoms
-    lead        frames before the first event for the starting panel
-    settle      frames after each event to show its new state
+    focus       the atom the reaction is about (default: the one in most events)
+    crop        "slab" (default): a slab slab Å either side of the focus atom's starting
+                position, the same window in every panel, as in a publication strip;
+                "around": atoms within around Å of the reacting atoms, framed together
+    window      (width, height) of the slab window in Å (default: fit the panels)
+    anchor      where the focus atom's starting position sits in the window, as a
+                fraction of its width and height, e.g. (0.5, 0.33) leaves room above
+    roles       colour the focus atom and whatever is bonded to it in each frame in
+                saturated versions of their element colours (role_colors overrides,
+                e.g. {"S": "#e0a01c", "Mo": "#2f7f92", "H": "#e8503a"})
+    notes       show "(atom added)" / "(removed)" in panel titles
+    lead, settle  frames before the first event / after each event to show
     show_broken draw bonds that just broke as dashed contacts
     wrap        wrap panel titles at this many characters (None: no wrapping)
-    Other keyword arguments go to draw() (style, cutoffs, depth_cue, ...); the same
-    view, depth fade and framing are used in every panel.
+    Other keyword arguments go to draw() (style, cutoffs, colors, depth_cue, ...).
     Returns (artists, frame_indices).
     """
-    from .render import draw
     from . import select
+    from .render import draw
+    from .styles import style as get_style
+    from .view import auto_view, view_matrix
 
     axes = list(np.ravel(axes))
     structs, times = as_frames(frames, ids=ids)
     picks = _pick_frames(reaction, len(axes), lead, settle, len(structs))[:len(axes)]
     atoms = reaction.atoms
+    if focus is None:
+        counts = {}
+        for e in reaction.events:
+            for i in e.pair:
+                counts[i] = counts.get(i, 0) + 1
+        focus = max(counts, key=counts.get)
+    first = structs[picks[0][0]]
+    v = auto_view(first.positions) if isinstance(view, str) and view == "auto" else view
+    up = draw_kwargs.pop("up", None)
+    R = view_matrix(v, up=up, rotate=draw_kwargs.get("rotate"))
+    start = first.positions[first.index_of(focus)[0]] @ R.T          # page x, y, depth of the site
+
     crops = []
     for f, _ in picks:
         s = structs[f]
         present = [a for a in atoms if a in set(map(int, s.ids))]
-        crops.append(select.around(s, at=present, radius=around, keep=present) if present else s)
-
-    from .view import auto_view, view_matrix
-    v = auto_view(crops[0].positions) if isinstance(view, str) and view == "auto" else view
-    R = view_matrix(v, up=draw_kwargs.pop("up", None), rotate=draw_kwargs.get("rotate"))
+        if crop == "slab":
+            q = s.positions @ R.T
+            keep = np.abs(q[:, 2] - start[2]) <= slab
+            if window is not None:
+                x0 = start[0] - anchor[0] * window[0]
+                y0 = start[1] - anchor[1] * window[1]
+                keep &= (q[:, 0] >= x0 - 2) & (q[:, 0] <= x0 + window[0] + 2) & \
+                        (q[:, 1] >= y0 - 2) & (q[:, 1] <= y0 + window[1] + 2)
+            keep |= np.isin(s.ids, present)
+            crops.append(s[keep].copy(pbc=False))
+        elif crop == "around":
+            crops.append(select.around(s, at=present, radius=around, keep=present) if present else s)
+        else:
+            raise ValueError("crop must be 'slab' or 'around'")
     if "depth_range" not in draw_kwargs:
-        d = np.concatenate([(c.positions @ R.T)[:, 2] for c in crops])
-        draw_kwargs["depth_range"] = (float(d.min()), float(d.max()))
+        if crop == "slab":
+            draw_kwargs["depth_range"] = (start[2] - slab, start[2] + slab)
+        else:
+            d = np.concatenate([(c.positions @ R.T)[:, 2] for c in crops])
+            draw_kwargs["depth_range"] = (float(d.min()), float(d.max()))
+    draw_kwargs.setdefault("depth_fade", 0.8)
+    st = get_style(draw_kwargs.get("style", "jmol"), **{k: draw_kwargs[k] for k in ("colors",) if k in draw_kwargs})
+
     arts = []
-    for ax, (f, evs), crop in zip(axes, picks, crops):
+    for ax, (f, evs), crop_s in zip(axes, picks, crops):
         kw = dict(draw_kwargs)
-        if highlight:
-            kw.setdefault("highlight", [a for a in atoms if a in set(map(int, crop.ids))])
+        if roles:
+            # the focus atom and its bonded partners in this frame, in "active" colours
+            i, j, _ = find_bonds(crop_s, cutoffs=kw.get("cutoffs"), scale=kw.get("bond_scale", 1.15))
+            a_ids, b_ids = crop_s.ids[i], crop_s.ids[j]
+            partners = set(b_ids[a_ids == focus]) | set(a_ids[b_ids == focus])
+            hl = {}
+            for atom in [focus, *sorted(map(int, partners))]:
+                rows = crop_s.index_of(atom)
+                if len(rows):
+                    sym = crop_s.symbols[rows[0]]
+                    hl[atom] = (role_colors or {}).get(sym) or active_colour(st.color(sym))
+            kw.setdefault("highlight", hl)
             kw.setdefault("highlight_front", True)
         if show_broken:
             broken = [e.pair for e in evs if e.kind == "break"
-                      and all(p in set(map(int, crop.ids)) for p in e.pair)]
+                      and all(p in set(map(int, crop_s.ids)) for p in e.pair)]
             if broken:
                 kw["contacts"] = broken
-        arts.append(draw(ax, crop, view=v, **kw))
+        arts.append(draw(ax, crop_s, view=v, up=up, autoscale=False, **kw))
     for ax in axes[len(arts):]:          # more panels than steps: hide the spares
         ax.set_visible(False)
-    b = np.array([a.bounds for a in arts])
-    pad = draw_kwargs.get("pad", 0.5)
+    if crop == "slab" and window is not None:
+        x0, y0 = start[0] - anchor[0] * window[0], start[1] - anchor[1] * window[1]
+        xl, yl = (x0, x0 + window[0]), (y0, y0 + window[1])
+    else:
+        b = np.array([a.bounds for a in arts])
+        pad = draw_kwargs.get("pad", 0.5)
+        xl = (b[:, 0].min() - pad, b[:, 1].max() + pad)
+        yl = (b[:, 2].min() - pad, b[:, 3].max() + pad)
     for ax in axes[:len(arts)]:
-        ax.set_xlim(b[:, 0].min() - pad, b[:, 1].max() + pad)
-        ax.set_ylim(b[:, 2].min() - pad, b[:, 3].max() + pad)
+        ax.set_xlim(*xl)
+        ax.set_ylim(*yl)
     if labels:
         for k, (ax, (f, evs)) in enumerate(zip(axes, picks)):
-            steps = ["before"] if not evs else list(dict.fromkeys(e.label for e in evs))
+            names = ["before"] if not evs else list(dict.fromkeys(
+                e.label if notes else e.label.split(" (")[0] for e in evs))
             if wrap:
-                steps = [textwrap.fill(x, wrap) for x in steps]
-            ax.set_title(f"({_roman(k + 1)}) " + "\n".join(steps), fontsize=fontsize, loc="left")
-            t = f"{times[f]:.1f} {time_unit}" if times is not None else f"frame {f}"
-            ax.text(0.98, 0.98, t, transform=ax.transAxes, ha="right", va="top", fontsize=fontsize - 1,
+                names = [textwrap.fill(x, wrap) for x in names]
+            ax.set_title(f"({_roman(k + 1)}) " + "\n".join(names), fontsize=fontsize, loc="left")
+            tt = f"{times[f]:.1f} {time_unit}" if times is not None else f"frame {f}"
+            ax.text(0.98, 0.98, tt, transform=ax.transAxes, ha="right", va="top", fontsize=fontsize - 1,
                     color="#777777")
     return arts, [f for f, _ in picks]
 
@@ -274,3 +343,67 @@ def _roman(k):
             out += s
             k -= v
     return out
+
+
+def neighbour_counts(frames, atom_id, *, ids="uid", cutoffs=None, bond_scale=1.15):
+    """How many neighbours of each element one atom has in every frame.
+
+    Returns (times or frame numbers, {symbol: counts}); counts are NaN in frames
+    where the atom is absent.
+    """
+    structs, times = as_frames(frames, ids=ids)
+    per = []
+    for s in structs:
+        rows = s.index_of(atom_id)
+        if len(rows) == 0:
+            per.append(None)
+            continue
+        i, j, _ = find_bonds(s, cutoffs=cutoffs, scale=bond_scale)
+        r = rows[0]
+        partners = np.concatenate([j[i == r], i[j == r]])
+        per.append(dict(zip(*np.unique(s.symbols[partners], return_counts=True))))
+    symbols = sorted({k for d in per if d for k in d}, key=lambda x: -_ORDER.index(x))
+    counts = {sym: np.array([np.nan if d is None else d.get(sym, 0) for d in per], float) for sym in symbols}
+    t = times if times is not None else np.arange(len(structs), dtype=float)
+    return t, counts
+
+
+def plot_neighbours(ax, frames, atom_id, *, ids="uid", cutoffs=None, bond_scale=1.15, events=None,
+                    colors=None, style="jmol", label_events=True, fontsize=7, min_frames=1):
+    """Step plot of an atom's neighbour count per element over time, with bond
+    events marked: a readable timeline of what happened to it."""
+    from .styles import style as get_style
+
+    st = get_style(style)
+    t, counts = neighbour_counts(frames, atom_id, ids=ids, cutoffs=cutoffs, bond_scale=bond_scale)
+    lines = []
+    if min_frames > 1:                       # hide flicker shorter than min_frames
+        for sym, n in counts.items():
+            series = np.where(np.isfinite(n), n, -1).astype(int)
+            clean = np.full(len(series), series[0], float)
+            for f, _, new in _debounced_changes(series, min_frames):
+                clean[f:] = new
+            clean[clean < 0] = np.nan
+            counts[sym] = clean
+    for k, (sym, n) in enumerate(counts.items()):
+        colour = (colors or {}).get(sym) or _darker(st.color(sym))
+        lines.append(ax.step(t, n + 0.06 * (k - (len(counts) - 1) / 2), where="post", color=colour, lw=1.4,
+                             label=f"{sym} neighbours")[0])
+    for e in events or []:
+        x = e.time if e.time is not None else e.frame
+        ax.axvline(x, color="#999999", lw=0.6, ls=(0, (2, 2)), zorder=0)
+    top = max(np.nanmax(n) for n in counts.values()) if counts else 1
+    ax.set_ylim(-0.4, top + 0.8)
+    ax.set_yticks(range(int(top) + 1))
+    ax.set_ylabel("neighbours", fontsize=fontsize + 0.5)
+    ax.set_xlabel("time / ps" if not np.allclose(t, np.arange(len(t))) else "frame", fontsize=fontsize + 0.5)
+    ax.legend(handles=lines, fontsize=fontsize, frameon=False, loc="upper right")
+    return lines
+
+
+def _darker(rgb):
+    """Light element colours (S yellow, H white) need darkening to read as lines."""
+    r, g, b = rgb
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    f = 0.55 if lum > 0.75 else 0.85
+    return (r * f, g * f, b * f)
