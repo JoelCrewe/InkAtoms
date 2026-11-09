@@ -336,3 +336,18 @@ def test_depth_cue_toggle():
     assert np.isclose(off.radii[0], off.radii[1])
     faces = off.collection.get_facecolor()
     assert np.allclose(faces[0], faces[1])
+
+
+def test_use_collection_faces_is_safe(tmp_path):
+    out = ia.use_collection_faces(cache_dir=tmp_path)
+    assert isinstance(out, list)          # empty off macOS or on matplotlib >= 3.11
+
+
+def test_layers_override_depth_order():
+    fig, ax = plt.subplots()
+    s = (["Mo", "S"], [[0, 0, 0], [0.3, 0, 3.0]])      # S in front of Mo
+    by_depth = ia.draw(ax, s, view="z", bonds=False, depth_cue=False)
+    layered = ia.draw(ax, s, view="z", bonds=False, depth_cue=False, layers={"S": 0, "Mo": 1})
+    mo = ia.style("jmol").color("Mo")
+    assert not np.allclose(by_depth.collection.get_facecolor()[-1][:3], mo)
+    assert np.allclose(layered.collection.get_facecolor()[-1][:3], mo)

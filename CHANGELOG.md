@@ -2,6 +2,9 @@
 
 ## 0.2.0
 
+- `layers=` draw order by element; `use_collection_faces()` fixes bold Helvetica on
+  macOS with matplotlib < 3.11; journal widths checked against publisher guidance
+  (ACS single column corrected to 3.33 in; unverified Science/Wiley entries removed)
 - `depth_cue=False` switch (and `--no-depth-cue`), `fade_distance=` for a fixed fade
   length, per-element outline colours (`edge_colors=`), explicit bond lists (`bonds=[(a, b), ...]`)
 - Colour atoms by a value (`color_by=`) with `colorbar()`; per-atom arrows (`vectors=`)

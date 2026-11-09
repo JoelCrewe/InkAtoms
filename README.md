@@ -73,6 +73,10 @@ Depth cueing is on by default; `depth_cue=False` draws every atom at full colour
 and size, and `fade_distance=6` fades over a fixed 6 Å instead of the whole depth
 of the drawing (so small and large structures fade alike).
 
+`layers={"S": 0, "Mo": 1, "H": 2}` draws whole elements above others (atoms in a
+layer still sort and fade by depth), which keeps a network or adsorbates visible
+in a dense slice.
+
 Any style field can be changed in the call:
 
 ```python
@@ -144,6 +148,12 @@ fig = plt.figure(figsize=ia.figsize("rsc", "double", 0.4))
 ia.picker(art)                                           # hover to see ids (interactive backends)
 ia.draw(ax, atoms, editable=True)                        # one SVG element per atom ("atom-12")
 ```
+
+## Fonts on macOS
+
+matplotlib before 3.11 reads only the regular face of macOS's Helvetica
+collection, so `fontweight="bold"` silently prints regular. `ia.use_collection_faces()`
+registers the other faces (from a local cache) and bold works again.
 
 ## Command line
 

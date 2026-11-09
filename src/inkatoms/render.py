@@ -174,8 +174,12 @@ class _Scene:
     def rgba(self, rgb, fade, alpha=1.0):
         return (*mix(rgb, self.bg, fade), alpha)
 
-    def add(self, depth, group, order, patch, face, edge, lw, ls=SOLID, gid=None):
-        self.items.append((float(depth), group, order, patch, face, edge, lw, ls, gid))
+    atom_layer = None   # per-atom draw layer (set by draw when layers= is given)
+
+    def add(self, depth, group, order, patch, face, edge, lw, ls=SOLID, gid=None, layer=None):
+        if layer is None:
+            layer = self.atom_layer[group] if (self.atom_layer is not None and group >= 0) else 0
+        self.items.append((float(depth), group, order, patch, face, edge, lw, ls, gid, layer))
 
 
 def _bond_polygon(a, b, half_width):
@@ -372,7 +376,7 @@ def _plane_polygon(cell, origin, hkl, offset=1.0):
 def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
          style="jmol", mode="ballstick", depth_cue=True,
          color_by=None, cmap="viridis", vmin=None, vmax=None, norm=None,
-         highlight=None, highlight_front=False,
+         highlight=None, highlight_front=False, layers=None,
          bonds=True, cutoffs=None, bond_scale=1.15, bond_orders=False, pbc_bonds=None,
          bond_styles=None, contacts=None,
          vectors=None, vector_scale=1.0, vector_color="#c0392b", vector_width=0.07,
@@ -404,6 +408,9 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
                    in matplotlib; then inkatoms.colorbar(artist)
       highlight    ids drawn unfaded with a heavier outline, or {id: colour};
                    highlight_front=True keeps them on top of everything
+      layers       {symbol: int}: draw lower layers first whatever their depth (atoms
+                   within a layer still sort and fade by depth), e.g. {"S": 0, "Mo": 1,
+                   "H": 2} keeps a Mo network and adsorbed H visible in a dense slice
 
     Bonds
       bonds, cutoffs, bond_scale   bonds=True finds bonds (cutoffs={"Mo-S": 2.85}
@@ -472,6 +479,8 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
     for sym, rad in (radii or {}).items():
         r3[s.symbols == sym] = rad
 
+    if layers:
+        scene.atom_layer = np.array([layers.get(sym, 0) for sym in s.symbols], float)
     hl, hl_colours = _highlight(s, highlight)
     xy, depth, f_atom = scene.project(s.positions) if n else (np.zeros((0, 2)), np.zeros(0), np.zeros(0))
     t_atom = np.where(hl, 1.0, scene.t(depth))
@@ -689,7 +698,9 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
                         fade = float(scene.fade(t, xf))
                         scene.add(dmid, -1, 0, _poly(poly), scene.rgba(face, fade),
                                   scene.rgba(edge, fade), st.bond_edgewidth * k,
-                                  gid=f"bond-{s.ids[i]}-{s.ids[j]}")
+                                  gid=f"bond-{s.ids[i]}-{s.ids[j]}",
+                                  layer=min(scene.atom_layer[i], scene.atom_layer[j])
+                                  if scene.atom_layer is not None else 0)
 
     # ---- dashed contacts (hydrogen bonds or given pairs)
     if contacts is not None:
@@ -815,10 +826,11 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
         d = np.array([it[0] for it in items])
         g = np.array([it[1] for it in items])
         o = np.array([it[2] for it in items])
-        order = np.lexsort((o, g, np.round(d, 6)))
+        lay = np.array([it[9] for it in items])
+        order = np.lexsort((o, g, np.round(d, 6), lay))
         if editable:
             for rank, q_ in enumerate(order):
-                _, _, _, path, face, edge, lw, ls, gid = items[q_]
+                _, _, _, path, face, edge, lw, ls, gid, _ = items[q_]
                 patch = PathPatch(path)
                 patch.set_facecolor(face)
                 patch.set_edgecolor(edge)

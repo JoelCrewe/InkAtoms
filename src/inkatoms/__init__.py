@@ -14,6 +14,7 @@ from .bonds import (ORDER_LIMITS, bond_orders, coordination, cutoff_matrix, find
                     find_rings)
 from .extras import COLUMN_WIDTHS, axes_triad, colorbar, figsize, legend, legend_handles, scale_bar
 from .figures import animate, inset, panels
+from .fonts import use_collection_faces
 from .picker import Picker, picker
 from .render import StructureArtist, atom_values, draw, set_scale, structure_figure
 from .slices import density_slice, read_cube, sample_plane
@@ -40,4 +41,6 @@ __all__ = [
     "density_slice", "sample_plane", "read_cube",
     # views
     "view_matrix", "auto_view", "project",
+    # fonts
+    "use_collection_faces",
 ]

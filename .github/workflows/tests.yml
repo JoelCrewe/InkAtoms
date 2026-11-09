@@ -22,8 +22,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
+      # The image baselines were rendered on macOS; Linux font and anti-aliasing
+      # differences would fail them, so only the macOS jobs compare images.
       - name: Tests (with image comparison)
+        if: runner.os == 'macOS'
         run: python -m pytest --mpl -q
+      - name: Tests
+        if: runner.os != 'macOS'
+        run: python -m pytest -q
       - name: Command-line smoke test
         run: |
           python -c "from ase.build import molecule; from ase.io import write; write('m.xyz', molecule('CH3COOH'))"

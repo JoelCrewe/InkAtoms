@@ -85,17 +85,21 @@ def axes_triad(ax, art, *, loc=(0.1, 0.12), length=0.08, labels=("x", "y", "z"),
     return out
 
 
-# Column widths (inches) from the journals' author guidelines; check the current
-# guidelines before final submission, they change occasionally.
+# Column widths (inches), checked against the publishers' guidance in Nov 2026:
+#   ACS       240 pt (3.33 in) single, 7 in double (ACS journal author guidelines)
+#   RSC       8.3 cm single, 17.1 cm double (rsc.org, figures and graphics)
+#   Nature    89 mm single, 183 mm double (Nature research figure guide)
+#   Elsevier  90 mm single, 190 mm full width (Elsevier artwork sizing)
+#   AIP       3.37 in single, 6.69 in double (AIP journal guidelines)
+#   APS       REVTeX column 246 pt and text 510 pt widths (Physical Review layout)
+# Individual journals can differ; check the target journal before submitting.
 COLUMN_WIDTHS = {
-    "acs": {"single": 3.25, "double": 7.0},
+    "acs": {"single": 3.33, "double": 7.0},
     "rsc": {"single": 3.27, "double": 6.73},
     "nature": {"single": 3.50, "double": 7.20},
-    "science": {"single": 2.17, "double": 4.72},
     "elsevier": {"single": 3.54, "double": 7.48},
-    "wiley": {"single": 3.35, "double": 6.93},
     "aip": {"single": 3.37, "double": 6.69},
-    "aps": {"single": 3.40, "double": 7.00},
+    "aps": {"single": 3.40, "double": 7.06},
 }
 
 

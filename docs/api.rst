@@ -56,6 +56,11 @@ Volumetric data
 .. autofunction:: inkatoms.sample_plane
 .. autofunction:: inkatoms.read_cube
 
+Fonts
+-----
+
+.. autofunction:: inkatoms.use_collection_faces
+
 Views
 -----
 
