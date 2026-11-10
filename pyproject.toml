@@ -38,6 +38,7 @@ ml = ["dscribe", "ase>=3.22"]
 all = ["ase>=3.22", "pymatgen", "rdkit", "MDAnalysis", "pillow", "dscribe"]
 dev = ["pytest", "pytest-mpl", "ase>=3.22", "rdkit", "MDAnalysis", "pillow"]
 docs = ["sphinx", "sphinx-gallery", "furo", "ase>=3.22", "rdkit", "pillow"]
+tutorial = ["ase>=3.22", "rdkit", "ipywidgets", "jupyterlab"]
 
 [tool.hatch.build.targets.sdist]
 exclude = ["docs/_build", "docs/auto_examples", ".venv"]

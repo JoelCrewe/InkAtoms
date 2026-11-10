@@ -2,6 +2,8 @@
 
 ## 0.3.0 (unreleased)
 
+- Beginner tutorial notebook with interactive examples (`examples/tutorial.ipynb`,
+  built by `examples/build_tutorial.py`); `inkatoms[tutorial]` extra
 - Trajectories: `as_frames`, `track`, `unwrap`, `mobile`
 - Events: `find_events` / `find_reactions` (debounced bond changes, insertions and
   removals), `group_reactions`, `event_strip`

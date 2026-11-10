@@ -31,6 +31,17 @@ same fonts, axes and annotations.
 
 Documentation and gallery: https://joelcrewe.github.io/InkAtoms
 
+## Tutorial
+
+New to inkatoms? [`examples/tutorial.ipynb`](examples/tutorial.ipynb) is a beginner's tour with
+sliders and menus to play with: views, styles, depth, labels, molecules, crystals, colouring,
+cutting out regions, paper figures, reactions in trajectories and comparing structures.
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/JoelCrewe/InkAtoms/blob/main/examples/tutorial.ipynb)
+
+Locally: `pip install "inkatoms[all]" ipywidgets jupyterlab`, then `jupyter lab examples/tutorial.ipynb`.
+The sliders need a running notebook (Jupyter, VS Code or Colab); GitHub's preview shows the text only.
+
 ## Install
 
 ```bash
