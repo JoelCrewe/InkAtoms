@@ -1,10 +1,7 @@
-"""Find bond-forming and bond-breaking events in a trajectory, group them into
-reactions, and draw a reaction as a strip of labelled panels.
+"""Bond-forming and bond-breaking events in a trajectory, and strips of panels showing them.
 
-The rule is simple and explainable: two atoms are bonded when they are within
-the bond cutoff (the same cutoffs draw() uses), and a change only counts once
-the new state has lasted min_frames frames, so vibration across the cutoff is
-not reported as chemistry.
+A change counts once it has lasted ``min_frames`` frames, so vibrations across a
+cutoff are ignored.
 """
 
 from __future__ import annotations
@@ -22,7 +19,7 @@ _ORDER = list(DATA)
 
 
 def _pair_label(sa, sb):
-    a, b = sorted((sa, sb), key=lambda s: -_ORDER.index(s))    # heavier element first
+    a, b = sorted((sa, sb), key=lambda s: -_ORDER.index(s))    # heavier first: "Mo–S", not "S–Mo"
     return f"{a}–{b}"
 
 
@@ -30,11 +27,10 @@ def _pair_label(sa, sb):
 class BondEvent:
     frame: int                 # first frame of the new state
     kind: str                  # "form" or "break"
-    pair: tuple                # (id_a, id_b)
-    symbols: tuple             # (symbol_a, symbol_b)
-    time: float | None = None  # ps, when the frames carry times
-    note: str = ""             # "atom added" / "removed" when an atom appears or leaves bonded
-                               # (insertions and deletions in grand-canonical runs)
+    pair: tuple
+    symbols: tuple
+    time: float | None = None  # ps
+    note: str = ""             # "atom added" / "removed" (GCMC insertions and deletions)
 
     @property
     def label(self):
@@ -69,13 +65,10 @@ class Reaction:
 
 
 def bond_states(frames, *, ids="uid", cutoffs=None, bond_scale=1.15, pbc=None, only=None, pairs=None):
-    """Bonded state of atom pairs in every frame.
+    """Bonded state of every pair that is bonded in at least one frame.
 
-    Returns (pairs, states, symbols, structs, times): states[f, k] is 1 when
-    pair k is bonded in frame f, 0 when both atoms are present but not bonded,
-    -1 when either is missing. Only pairs bonded in at least one frame are
-    kept; only= restricts to pairs involving these ids, pairs= to element pairs
-    such as {"Mo-S", "S-H"}.
+    Returns ``(pairs, states, symbols, structs, times)``. ``states[f, k]`` is 1 if pair
+    ``k`` is bonded in frame ``f``, 0 if not, and -1 if either atom is missing.
     """
     structs, times = as_frames(frames, ids=ids)
     only = None if only is None else set(int(i) for i in np.atleast_1d(only))
@@ -121,26 +114,37 @@ def _debounced_changes(series, min_frames):
 
 def find_events(frames, *, ids="uid", cutoffs=None, bond_scale=1.15, min_frames=5, only=None,
                 pairs=None, pbc=None):
-    """Bond-forming and bond-breaking events in a trajectory.
+    """Find bonds that form and break in a trajectory.
 
-    frames      ASE frames (e.g. ase.io.read(path, ":")) or Structures
-    ids         per-atom id array that persists between frames (default "uid")
-    cutoffs     pair cutoffs in Å as in draw(), e.g. {"Mo-S": 2.85, "S-H": 1.8}
-    min_frames  a new state must last this many frames to count
-    only        report only events involving these ids
-    pairs       report only these element pairs, e.g. {"Mo-S", "S-H"}
+    Parameters
+    ----------
+    frames : list of Atoms or Structures
+    ids : str
+        Per-atom array holding ids that persist between frames.
+    cutoffs : dict, optional
+        Pair cutoffs in Å, as in :func:`draw`.
+    min_frames : int
+        A new state must last this many frames to count.
+    only : list, optional
+        Only events involving these ids.
+    pairs : set, optional
+        Only these element pairs, e.g. ``{"Mo-S", "S-H"}``.
+
+    Returns
+    -------
+    list of BondEvent
     """
     all_pairs, states, symbols, _, times = bond_states(frames, ids=ids, cutoffs=cutoffs,
                                                         bond_scale=bond_scale, pbc=pbc, only=only, pairs=pairs)
     events = []
     for k, pair in enumerate(all_pairs):
         for frame, old, new in _debounced_changes(states[:, k], min_frames):
-            if new == 1:                          # apart -> bonded, or arrives bonded
+            if new == 1:
                 kind, note = "form", "atom added" if old == -1 else ""
-            elif old == 1:                        # bonded -> apart, or leaves bonded
+            elif old == 1:
                 kind, note = "break", "removed" if new == -1 else ""
             else:
-                continue                          # apart <-> missing: nothing happened to the bond
+                continue                          # apart <-> missing
             events.append(BondEvent(frame=frame, kind=kind, pair=pair, symbols=symbols[k],
                                     time=None if times is None else float(times[frame]), note=note))
     return sorted(events, key=lambda e: (e.frame, e.pair))
@@ -183,7 +187,7 @@ def _pick_frames(reaction, n_panels, lead, settle, n_frames):
     it, so the new state shows); thinned evenly if there are more events than panels."""
     events = sorted(reaction.events, key=lambda e: e.frame)
     steps = []
-    for e in events:          # events in the same frame share a panel
+    for e in events:          # same frame -> same panel
         if steps and steps[-1][0] == e.frame:
             steps[-1][1].append(e)
         else:
@@ -195,22 +199,21 @@ def _pick_frames(reaction, n_panels, lead, settle, n_frames):
     picks = [(start, [])]
     for f, evs in steps:
         if all(e.note == "removed" for e in evs):
-            picks.append((max(f - 1, 0), evs))          # the last frame before the atoms vanish
+            picks.append((max(f - 1, 0), evs))          # last frame before they vanish
         else:
             picks.append((min(f + settle, n_frames - 1), evs))
     return picks
 
 
 def active_colour(colour):
-    """A saturated, darker version of an element colour, for atoms that take part;
-    near-white (H) becomes red, as in the MoS3 paper figures."""
+    """Darker, more saturated version of an element colour; white becomes red."""
     import colorsys
 
     from matplotlib.colors import to_rgb
 
     r, g, b = to_rgb(colour)
     h, s, v = colorsys.rgb_to_hsv(r, g, b)
-    if s < 0.15:                     # white / grey: no hue to deepen
+    if s < 0.15:                     # white/grey (H): use red
         return (0.91, 0.31, 0.23)
     return colorsys.hsv_to_rgb(h, min(1.0, s * 1.35 + 0.1), v * 0.78)
 
@@ -219,25 +222,39 @@ def event_strip(axes, frames, reaction, *, ids="uid", focus=None, crop="slab", s
                 anchor=(0.5, 0.5),
                 around=7.0, lead=10, settle=2, view="z", roles=True, role_colors=None, notes=False,
                 time_unit="ps", labels=True, show_broken=True, fontsize=8, wrap=18, **draw_kwargs):
-    """Draw a reaction as a strip of panels: the state before it, then each step.
+    """Draw a reaction as panels: one before it, then one per step.
 
-    axes        a list/array of Axes (one panel per step plus one for the start)
-    focus       the atom the reaction is about (default: the one in most events)
-    crop        "slab" (default): a slab slab Å either side of the focus atom's starting
-                position, the same window in every panel, as in a publication strip;
-                "around": atoms within around Å of the reacting atoms, framed together
-    window      (width, height) of the slab window in Å (default: fit the panels)
-    anchor      where the focus atom's starting position sits in the window, as a
-                fraction of its width and height, e.g. (0.5, 0.33) leaves room above
-    roles       colour the focus atom and whatever is bonded to it in each frame in
-                saturated versions of their element colours (role_colors overrides,
-                e.g. {"S": "#e0a01c", "Mo": "#2f7f92", "H": "#e8503a"})
-    notes       show "(atom added)" / "(removed)" in panel titles
-    lead, settle  frames before the first event / after each event to show
-    show_broken draw bonds that just broke as dashed contacts
-    wrap        wrap panel titles at this many characters (None: no wrapping)
-    Other keyword arguments go to draw() (style, cutoffs, colors, depth_cue, ...).
-    Returns (artists, frame_indices).
+    Parameters
+    ----------
+    axes : list of Axes
+    frames : list
+    reaction : Reaction
+    focus : int, optional
+        The atom the reaction is about; defaults to the one in most events.
+    crop : {"slab", "around"}
+        ``"slab"``: atoms within ``slab`` Å of the focus atom's starting depth, in the
+        same ``window`` (width, height in Å) in every panel. ``"around"``: atoms within
+        ``around`` Å of the reacting atoms.
+    anchor : (float, float)
+        Position of the focus atom in the window, as fractions of its size.
+    roles : bool
+        Colour the focus atom and its bonded partners with :func:`active_colour`, or
+        with ``role_colors`` per element.
+    notes : bool
+        Show "(atom added)" / "(removed)" in titles.
+    lead, settle : int
+        Frames before the first event, and after each event, to show.
+    show_broken : bool
+        Draw just-broken bonds as dashed contacts.
+    wrap : int or None
+        Wrap titles at this many characters.
+    **draw_kwargs
+        Passed to :func:`draw`.
+
+    Returns
+    -------
+    (list of StructureArtist, list of int)
+        The artists and the frame shown in each panel.
     """
     from . import select
     from .render import draw
@@ -258,7 +275,7 @@ def event_strip(axes, frames, reaction, *, ids="uid", focus=None, crop="slab", s
     v = auto_view(first.positions) if isinstance(view, str) and view == "auto" else view
     up = draw_kwargs.pop("up", None)
     R = view_matrix(v, up=up, rotate=draw_kwargs.get("rotate"))
-    start = first.positions[first.index_of(focus)[0]] @ R.T          # page x, y, depth of the site
+    start = first.positions[first.index_of(focus)[0]] @ R.T
 
     crops = []
     for f, _ in picks:
@@ -291,7 +308,7 @@ def event_strip(axes, frames, reaction, *, ids="uid", focus=None, crop="slab", s
     for ax, (f, evs), crop_s in zip(axes, picks, crops):
         kw = dict(draw_kwargs)
         if roles:
-            # the focus atom and its bonded partners in this frame, in "active" colours
+            # focus atom and whatever it is bonded to in this frame
             i, j, _ = find_bonds(crop_s, cutoffs=kw.get("cutoffs"), scale=kw.get("bond_scale", 1.15))
             a_ids, b_ids = crop_s.ids[i], crop_s.ids[j]
             partners = set(b_ids[a_ids == focus]) | set(a_ids[b_ids == focus])
@@ -309,7 +326,7 @@ def event_strip(axes, frames, reaction, *, ids="uid", focus=None, crop="slab", s
             if broken:
                 kw["contacts"] = broken
         arts.append(draw(ax, crop_s, view=v, up=up, autoscale=False, **kw))
-    for ax in axes[len(arts):]:          # more panels than steps: hide the spares
+    for ax in axes[len(arts):]:
         ax.set_visible(False)
     if crop == "slab" and window is not None:
         x0, y0 = start[0] - anchor[0] * window[0], start[1] - anchor[1] * window[1]
@@ -346,10 +363,9 @@ def _roman(k):
 
 
 def neighbour_counts(frames, atom_id, *, ids="uid", cutoffs=None, bond_scale=1.15):
-    """How many neighbours of each element one atom has in every frame.
+    """Neighbours of one atom, per element, in every frame.
 
-    Returns (times or frame numbers, {symbol: counts}); counts are NaN in frames
-    where the atom is absent.
+    Returns ``(times, {symbol: counts})``; counts are NaN where the atom is missing.
     """
     structs, times = as_frames(frames, ids=ids)
     per = []
@@ -370,14 +386,13 @@ def neighbour_counts(frames, atom_id, *, ids="uid", cutoffs=None, bond_scale=1.1
 
 def plot_neighbours(ax, frames, atom_id, *, ids="uid", cutoffs=None, bond_scale=1.15, events=None,
                     colors=None, style="jmol", label_events=True, fontsize=7, min_frames=1):
-    """Step plot of an atom's neighbour count per element over time, with bond
-    events marked: a readable timeline of what happened to it."""
+    """Plot an atom's neighbour counts per element over time, with events marked."""
     from .styles import style as get_style
 
     st = get_style(style)
     t, counts = neighbour_counts(frames, atom_id, ids=ids, cutoffs=cutoffs, bond_scale=bond_scale)
     lines = []
-    if min_frames > 1:                       # hide flicker shorter than min_frames
+    if min_frames > 1:
         for sym, n in counts.items():
             series = np.where(np.isfinite(n), n, -1).astype(int)
             clean = np.full(len(series), series[0], float)

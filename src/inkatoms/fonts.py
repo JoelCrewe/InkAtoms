@@ -1,10 +1,7 @@
-"""Make every face of a font collection (.ttc) available to matplotlib.
+"""Work around matplotlib < 3.11 only reading the first face of .ttc fonts.
 
-matplotlib before 3.11 only reads the first face of a .ttc/.otc collection.
-On macOS, Helvetica, Helvetica Neue and others ship as collections, so asking
-for bold Helvetica silently gives the regular face. use_collection_faces()
-extracts the other faces into a local cache folder (for this machine only,
-never copied anywhere) and registers them, so fontweight="bold" works again.
+On macOS this makes bold Helvetica come out regular. The other faces are written
+to a local cache and registered with the font manager.
 """
 
 from __future__ import annotations
@@ -38,7 +35,7 @@ def use_collection_faces(families=("Helvetica", "Helvetica Neue"), cache_dir=Non
 
     try:
         from fontTools.ttLib import TTCollection
-    except ImportError:          # fontTools ships with matplotlib, but be safe
+    except ImportError:
         return []
     families = {families} if isinstance(families, str) else set(families)
     sources = sorted({e.fname for e in fm.fontManager.ttflist
@@ -54,14 +51,13 @@ def use_collection_faces(families=("Helvetica", "Helvetica Neue"), cache_dir=Non
             continue
         for k, face in enumerate(collection.fonts):
             if k == 0:
-                continue                 # matplotlib already has the first face
+                continue                 # already known to matplotlib
             target = cache / f"{Path(src).stem}-face{k}.ttf"
             if not target.exists():
                 face.save(str(target))
             if str(target) not in known:
                 fm.fontManager.addfont(str(target))
             added.append(target)
-    # forget any lookups made before the new faces were known
     if hasattr(fm.fontManager, "_findfont_cached"):
         fm.fontManager._findfont_cached.cache_clear()
     if hasattr(fm, "_get_font"):

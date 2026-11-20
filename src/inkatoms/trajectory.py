@@ -1,4 +1,4 @@
-"""Trajectories: frames as Structures with times, and atoms tracked by id."""
+"""Frames, times and per-atom tracks."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def as_frames(frames, ids=None):
         if isinstance(f, Structure):
             return f
         if isinstance(ids, str) and ids not in getattr(f, "arrays", {}):
-            return as_structure(f)          # no such id array: fall back to row order
+            return as_structure(f)          # no id array: use row order
         return as_structure(f, ids=ids)
 
     frames = list(frames)

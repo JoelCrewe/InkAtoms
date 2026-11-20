@@ -25,15 +25,13 @@ NONMETALS = frozenset("H He B C N O F Ne Si P S Cl Ar Ge As Se Br Kr Sb Te I Xe 
 
 
 def cutoff_matrix(species, cutoffs=None, scale=1.15, metal_scale=None):
-    """Cutoff (Å) for every pair of species.
+    """Bond cutoffs (Å) for every pair of species.
 
-    Default: scale x (covalent radius a + covalent radius b). Metal-metal
-    pairs use metal_scale instead, because metal covalent radii are already
-    generous: 1.0 in metals and alloys, and 0.92 when non-metals other than H
-    are present (compounds), so cation-cation contacts in oxides and
-    sulfides (rutile Ti-Ti 2.96 Å, MoS2 Mo-Mo 3.16 Å) are not bonds while
-    real metal-metal bonds (Mo3 triangles, 2.7 Å) are. Entries in `cutoffs`
-    override pairs, keyed "Mo-S", ("Mo", "S") or frozenset; 0 switches a pair off.
+    The default is ``scale`` x the sum of covalent radii. Metal-metal pairs use
+    ``metal_scale`` instead: 1.0 for metals, 0.92 in compounds, so that cation-cation
+    contacts in oxides and sulfides (rutile Ti-Ti, MoS2 Mo-Mo) are not bonded but Mo3
+    triangles are. ``cutoffs`` overrides pairs, keyed ``"Mo-S"`` or ``("Mo", "S")``;
+    0 switches a pair off.
     """
     species = list(species)
     if metal_scale is None:
@@ -55,11 +53,8 @@ def cutoff_matrix(species, cutoffs=None, scale=1.15, metal_scale=None):
 def find_bonds(atoms, cutoffs=None, scale=1.15, pbc=None, metal_scale=None):
     """Find bonded pairs.
 
-    Returns (i, j, shift): row indices into the structure and, for each bond,
-    the integer lattice shift such that atom j's partner image sits at
-    positions[j] + shift @ cell. Each bond appears once.
-
-    pbc: None follows the structure; False ignores periodicity.
+    Returns ``(i, j, shift)``: row indices and, per bond, the lattice shift of j's image
+    (``positions[j] + shift @ cell``). ``pbc=False`` ignores periodicity.
     """
     s = as_structure(atoms)
     n = len(s)
@@ -89,7 +84,7 @@ def find_bonds(atoms, cutoffs=None, scale=1.15, pbc=None, metal_scale=None):
     I, J, S = [], [], []
     for shift in itertools.product(*(range(-r, r + 1) for r in reps)):
         shift = np.array(shift)
-        # keep one of each (i, j, +S) / (j, i, -S) pair
+        # (i, j, +S) and (j, i, -S) are the same bond
         nz = shift[np.nonzero(shift)[0]]
         if len(nz) and nz[0] < 0:
             continue
@@ -109,11 +104,8 @@ def find_bonds(atoms, cutoffs=None, scale=1.15, pbc=None, metal_scale=None):
     return np.concatenate(I), np.concatenate(J), np.concatenate(S).astype(int)
 
 
-# Longest distance (Å) still drawn as a double / triple bond, per element pair.
-# Set between typical single, double and triple bond lengths and checked on
-# ASE's g2 molecules: ethene, HCHO, CO2, CS2, DMSO, SO2 -> double; HCN, N2,
-# nitriles -> triple; thiophene and pyrrole get alternating double bonds,
-# while benzene and pyridine (1.39-1.40 Å, aromatic) stay single.
+# max length (Å) for a double / triple bond; tuned on ASE's g2 set so that
+# benzene and pyridine (1.39-1.40 Å) stay single
 ORDER_LIMITS = {
     frozenset(("C",)): (1.385, 1.28),
     frozenset(("C", "N")): (1.31, 1.22),
@@ -131,11 +123,8 @@ ORDER_LIMITS = {
 def bond_orders(atoms, bonds=None, limits=None):
     """Guess bond orders (1, 2 or 3) from bond lengths.
 
-    A length-based guess for drawing, not chemistry: it needs reasonable
-    geometries (optimised or experimental, not hot MD frames) and only knows
-    the pairs in ORDER_LIMITS (C, N, O, S, P); everything else is single.
-    bonds: (i, j, shift) from find_bonds (found if not given).
-    limits: {pair: (max double, max triple or None)} merged over ORDER_LIMITS.
+    Only meant for drawing: it needs reasonable geometries and only knows the pairs in
+    ``ORDER_LIMITS`` (C, N, O, S, P). ``limits`` adds to or overrides them.
     """
     s = as_structure(atoms)
     i, j, shift = find_bonds(s) if bonds is None else bonds
@@ -208,7 +197,7 @@ def find_rings(atoms, bonds=None, *, max_size=8, include_h=False):
     rings, seen = [], set()
     for a, b in zip(i[keep], j[keep]):
         a, b = int(a), int(b)
-        # shortest path a -> b that does not use the a-b bond
+        # BFS from a to b without the a-b bond
         prev = {a: None}
         queue = [a]
         found = False

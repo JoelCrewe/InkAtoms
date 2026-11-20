@@ -1,5 +1,4 @@
-"""The depth-sorted scene every drawing is built in, and the geometry helpers
-the layers share (raw paths, bond polygons, dashes, arrows, hulls, planes)."""
+"""Scene (projection, depth cueing, list of pieces) and shared geometry helpers."""
 
 from __future__ import annotations
 
@@ -14,14 +13,11 @@ from .bonds import coordination
 from .bonds import bond_orders as guess_orders
 from .styles import mix
 
-AUTO_RASTERIZE = 40000   # rasterize="auto" switches on above this many drawn pieces
 SOLID = "solid"
 DASHED = (0, (2.0, 1.6))
 
 
-# ---------------------------------------------------------------- raw geometry
-# Paths are built directly (not as Patch objects, which are slow to create);
-# editable=True wraps them in PathPatches afterwards.
+# Raw Paths rather than Patch objects: creating Patches is slow for big structures.
 
 _UNIT_CIRCLE = Path.circle((0.0, 0.0), 1.0)
 _CIRCLE_V, _CIRCLE_C = _UNIT_CIRCLE.vertices, _UNIT_CIRCLE.codes
@@ -45,8 +41,6 @@ def _wedge(centre, radius, theta1, theta2):
 
 
 
-# ---------------------------------------------------------------- scene
-
 class Scene:
     """Projection, depth cueing and the list of pieces to draw."""
 
@@ -62,7 +56,6 @@ class Scene:
         else:
             self.far, self.near = float(depth.min()), float(depth.max())
             if st.fade_distance:
-                # a fixed fade length, so small and large structures fade alike
                 self.far = self.near - float(st.fade_distance)
         self.items = []
         self.extent = []
@@ -91,7 +84,7 @@ class Scene:
     def rgba(self, rgb, fade, alpha=1.0):
         return (*mix(rgb, self.bg, fade), alpha)
 
-    atom_layer = None   # per-atom draw layer (set by draw when layers= is given)
+    atom_layer = None
 
     def add(self, depth, group, order, patch, face, edge, lw, ls=SOLID, gid=None, layer=None):
         if layer is None:
@@ -143,7 +136,7 @@ def _resolve_orders(s, bond_orders, bonds):
     if bond_orders is None or bond_orders is False:
         return np.ones(len(i), float)
     if bond_orders is True or bond_orders == "auto":
-        if s.bond_orders:   # known orders (e.g. RDKit) win over the guess
+        if s.bond_orders:   # e.g. from RDKit
             table = {frozenset(k): v for k, v in s.bond_orders.items()}
             guess = guess_orders(s, bonds)
             return np.array([table.get(frozenset((s.ids[a], s.ids[b])), g)
@@ -273,7 +266,7 @@ def _plane_polygon(cell, origin, hkl, offset=1.0):
     pts = []
     for a, b in itertools.combinations(range(8), 2):
         if np.abs(corners[a] - corners[b]).sum() != 1:
-            continue  # only the 12 cube edges
+            continue
         fa, fb = corners[a] @ hkl - offset, corners[b] @ hkl - offset
         if abs(fa) < 1e-9:
             pts.append(corners[a])

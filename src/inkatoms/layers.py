@@ -1,6 +1,4 @@
-"""The drawing layers. Each function adds one kind of piece (atoms, bonds,
-polyhedra, ...) to the shared depth-sorted scene held in a Ctx; draw() in
-render.py prepares the Ctx and calls them in order."""
+"""One function per kind of piece (atoms, bonds, polyhedra, ...). draw() calls them in order."""
 
 from __future__ import annotations
 
@@ -20,22 +18,22 @@ _EMPTY = (np.zeros(0, int), np.zeros(0, int), np.zeros((0, 3), int))
 
 @dataclass
 class Ctx:
-    """Everything the layers share for one drawing."""
+    """State shared by the layers for one drawing."""
 
     ax: object
-    s: object                 # the Structure being drawn
-    st: object                # the Style
-    scene: object             # the Scene collecting pieces
+    s: object
+    st: object
+    scene: object
     n: int
-    xy: np.ndarray            # page positions of the atoms
+    xy: np.ndarray
     depth: np.ndarray
-    k_atom: np.ndarray        # depth shrink factor per atom
-    r_eff: np.ndarray         # 3D radius per atom (for clipping bonds at the surface)
-    rr: np.ndarray            # drawn radius per atom on the page
+    k_atom: np.ndarray        # depth shrink factor
+    r_eff: np.ndarray         # 3D radius, bonds are clipped at this
+    rr: np.ndarray            # radius on the page
     fade_atom: np.ndarray
-    extra_fade: np.ndarray    # ghost images fade further
-    hl: np.ndarray            # highlighted rows
-    base: np.ndarray          # atom colours before fading
+    extra_fade: np.ndarray
+    hl: np.ndarray
+    base: np.ndarray          # colours before fading
     zorder: float
     bond_list: tuple = _EMPTY
     T: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))
@@ -112,7 +110,7 @@ def find_bond_list(ctx, bonds=True, mode="ballstick", polyhedra=None, rings=None
     draw_bonds = (explicit or bool(bonds)) and mode != "spacefill"
     need_bonds = draw_bonds or polyhedra or rings or contacts == "hbonds"
     if explicit:
-        # an explicit list of bonded id pairs, drawn exactly as given (no periodic shifts)
+        # explicit (id_a, id_b) pairs, no periodic shifts
         pairs = np.asarray(list(bonds), int).reshape(-1, 2)
         first = {int(i): r for r, i in reversed(list(enumerate(s.ids)))}
         missing = [int(x) for x in pairs.ravel() if int(x) not in first]
@@ -144,7 +142,6 @@ def polyhedra(ctx, polyhedra=None):
         centres = set(np.atleast_1d(centres))
         ligands = spec.get("ligands")
         ligands = None if ligands is None else set(np.atleast_1d(ligands))
-        # default ligands of a metal centre: its non-metal neighbours (the anions)
         alpha = spec.get("alpha", 0.38)
         min_lig = spec.get("min_ligands", 4)
         neigh = [[] for _ in range(n)]
@@ -211,7 +208,7 @@ def bonds(ctx, bond_orders=False, bond_styles=None):
             n2 = np.hypot(*d2)
             perp = np.array([-d2[1], d2[0]]) / n2 if n2 > 1e-9 else np.zeros(2)
             if order > 1 and n2 < 0.25 * L:
-                order = 1   # nearly along the line of sight: side-by-side lines would overlap
+                order = 1   # bond points at the viewer; parallel lines would overlap
             for off, width, dashed in _MULTI.get(order, _MULTI[min(int(round(order)), 3)]):
                 off, width = off * w, width * w
                 dashed = dashed or dashed_all
@@ -219,7 +216,7 @@ def bonds(ctx, bond_orders=False, bond_styles=None):
                 si = np.sqrt(max(r_eff[i] ** 2 - reach ** 2, 0.0))
                 sj = np.sqrt(max(r_eff[j] ** 2 - reach ** 2, 0.0))
                 if L <= si + sj:
-                    continue  # spheres overlap: bond hidden
+                    continue  # hidden inside the atoms
                 ai, aj = pi + u * si, pj - u * sj
                 mid = 0.5 * (ai + aj)
                 if split or tvec.any():
@@ -337,7 +334,7 @@ def vacancies(ctx, vacancies=None):
         for p, d, f in zip(vxy, vd, vf):
             t = float(scene.t(d))
             rad = st.vacancy_radius * float(scene.k(t)) * f
-            # markers are annotations: always on top, or a vacancy under an atom would vanish
+            # always on top, otherwise a vacancy under an atom disappears
             scene.add(d + 1e6, -1, 5, _circle(tuple(p), rad), (0, 0, 0, 0),
                       scene.rgba((0.3, 0.3, 0.3), float(scene.fade(t))), 0.9, ls=DASHED, gid="vacancy")
             scene.extent.extend([p - rad, p + rad])
@@ -388,17 +385,25 @@ def cell(ctx, cell=False, cell_vectors=False, planes=None):
 
 
 def trails(ctx, trails=None):
-    """Motion trails: the recent path of chosen atoms, fading with age.
+    """Motion trails, from ``draw(..., trails=dict(...))``.
 
-    trails = dict(frames=[...],          # trajectory frames (same coordinates as the drawing)
-                  ids=[...] | "mobile",  # atoms to trail ("mobile": the n that move most)
-                  n=8, id_key="uid",     # how many mobile atoms; per-atom id array in the frames
-                  style="arrow",         # "arrow": smoothed dashed route with an arrowhead;
-                                         # "ghosts": faded copies at earlier times (count=5);
-                                         # "line": every step (shows the thermal wiggle too)
-                  smooth=3, points=14,   # line smoothing (frames); points along the arrow route
-                  color="atom",          # "atom", "time" (colormap by time) or a colour
-                  cmap="viridis", width=0.08, fade=0.85)   # width in Å; how much the oldest part fades
+    Parameters
+    ----------
+    trails : dict
+        With the keys below.
+    frames : list
+        Trajectory frames, in the same coordinates as the drawing.
+    ids : list or "mobile"
+        Atoms to follow; "mobile" picks the ``n`` (default 8) that move most.
+    style : {"arrow", "ghosts", "line"}
+        Smoothed dashed route with an arrowhead, faded copies at earlier positions
+        (``count``), or every step.
+    color : "atom", "time" or a colour
+    width : float
+        Line width in Å (default 0.1).
+    smooth, points, cmap, fade, id_key
+        Smoothing window for "line", points along the "arrow" route, colormap for
+        ``color="time"``, fading of old "line" segments, and the per-atom id array.
     """
     if not trails:
         return
@@ -460,7 +465,7 @@ def _trail_line(scene, path, fixed, cmap, width, fade_old, atom_id):
         poly = _bond_polygon(q[0], q[1], 0.5 * width * float(scene.k(scene.t(d.mean()))) * float(fq.mean()))
         if poly is None:
             continue
-        age = (n_f - 2 - f) / max(n_f - 2, 1)          # 0 for the newest segment
+        age = (n_f - 2 - f) / max(n_f - 2, 1)
         colour = fixed if fixed is not None else np.array(cmap(f / max(n_f - 2, 1))[:3])
         scene.add(d.mean(), -1, 0, _poly(poly),
                   scene.rgba(colour, float(scene.fade(scene.t(d.mean()))), 1.0 - fade_old * age),
@@ -476,7 +481,7 @@ def _simplify(path, n_points):
     if len(raw) < 2:
         return raw
     pts = smooth(raw, max(3, len(raw) // 10))
-    pts[0], pts[-1] = raw[0], raw[-1]          # keep the true start and end
+    pts[0], pts[-1] = raw[0], raw[-1]
     seg = np.linalg.norm(np.diff(pts, axis=0), axis=1)
     s = np.concatenate([[0], np.cumsum(seg)])
     if s[-1] < 1e-6:
@@ -500,7 +505,7 @@ def _trail_arrow(scene, path, colour, width, n_points, r_end, st, atom_id):
         for p0, p1 in _dashes(a, b, 2.2 * st.dash_length, 1.6 * st.dash_gap):
             q, d, fq = scene.project(np.array([p0, p1]))
             poly = _bond_polygon(q[0], q[1], 0.5 * width * float(fq.mean()))
-            if poly is not None:              # annotations: not faded with depth
+            if poly is not None:
                 scene.add(d.mean(), -1, 0, _poly(poly), scene.rgba(colour, 0.0),
                           (0, 0, 0, 0), 0.0, gid=f"trail-{atom_id}")
                 scene.extent.extend(q)
@@ -513,14 +518,13 @@ def _trail_ghosts(scene, path, colour, count, radius, st, atom_id):
     good = np.flatnonzero(np.isfinite(path).all(axis=1))
     if len(good) < 2:
         return
-    # evenly spaced along the overall route (not in time, and not along the thermal
-    # wiggle), so a long wait in one place does not pile the copies up
+    # space them along the smoothed route; spacing in time piles them up where the atom waits
     route = _simplify(path, count + 1)[:-1]
     pos = path[good]
     picks = np.unique([good[int(np.argmin(np.linalg.norm(pos - r, axis=1)))] for r in route])
     edge = edge_of(colour, st.atom_edgecolor, st.darken)
     for n, f in enumerate(picks):
-        age = 1.0 - n / max(len(picks), 1)          # 1 for the oldest copy
+        age = 1.0 - n / max(len(picks), 1)
         q, d, fq = scene.project(path[f][None, :])
         rad = radius * (0.65 + 0.25 * (1 - age)) * float(fq[0])
         fade = float(scene.fade(scene.t(d[0])))

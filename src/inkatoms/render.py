@@ -1,10 +1,4 @@
-"""Draw a structure onto a matplotlib Axes.
-
-draw() prepares the view, radii, depth cueing and colours, then calls the
-layer functions in layers.py, each adding pieces (atoms, bonds, polyhedra,
-...) to one depth-sorted Scene, and finally assembles the scene back to front
-into a single vector artist.
-"""
+"""draw() and the artist it returns. The pieces themselves are made in layers.py."""
 
 from __future__ import annotations
 
@@ -25,7 +19,7 @@ from .styles import style as get_style
 from .view import auto_view, view_matrix
 
 MODES = ("ballstick", "spacefill", "sticks")
-AUTO_RASTERIZE = 40000   # rasterize="auto" switches on above this many drawn pieces
+AUTO_RASTERIZE = 40000   # pieces
 
 
 class StructureArtist:
@@ -33,17 +27,17 @@ class StructureArtist:
 
     def __init__(self, ax, collection, structure, projected, radii, R, style, scene):
         self.ax = ax
-        self.collection = collection        # PatchCollection (None when editable=True)
-        self.patches = []                   # individual patches when editable=True
-        self.structure = structure          # what was drawn (after images/ghosts)
-        self.projected = projected          # (N, 3) page x, page y, depth
-        self.radii = radii                  # (N,) drawn radius on the page, Å
-        self.rotation = R                   # rows: page right, up, out in structure coordinates
+        self.collection = collection        # None when editable=True
+        self.patches = []
+        self.structure = structure
+        self.projected = projected          # page x, page y, depth
+        self.radii = radii
+        self.rotation = R
         self.style = style
-        self.mappable = None                # ScalarMappable for colorbar() when color_by= was used
-        self.values = None                  # the per-atom values behind color_by
-        self.labels = []                    # Text artists from labels=
-        self.extras = []                    # other artists added by draw (cell-vector labels, ...)
+        self.mappable = None
+        self.values = None
+        self.labels = []
+        self.extras = []
         self._scene = scene
 
     def _rows(self, atom_id):
@@ -112,65 +106,73 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
          radii=None, depth_range=None, autoscale=True, pad=0.5, axis_off=True,
          zorder=2, rasterized="auto", editable=False, scale=None,
          **style_changes) -> StructureArtist:
-    """Draw a structure on ax and return a StructureArtist.
+    """Draw a structure on ``ax``.
 
-    Structure and view
-      atoms        ASE Atoms, pymatgen Structure/Molecule, RDKit Mol, MDAnalysis
-                   Universe, (symbols, positions) or Structure
-      view         direction out of the page: "z" (top), "-y" (side), ..., a vector,
-                   a 3x3 matrix, or "auto" (principal axes, widest face)
-      up, rotate   see view_matrix; rotate="20x,-30y" tilts about the page axes
-      perspective  camera distance (Å) from the structure centre; None is orthographic
+    Parameters
+    ----------
+    atoms : Atoms, pymatgen Structure/Molecule, RDKit Mol, MDAnalysis Universe or Structure
+    view : str, array or (3, 3) matrix
+        Direction out of the page: ``"z"`` (top), ``"-y"`` (side), any vector, or
+        ``"auto"`` for the principal axes. ``up`` and ``rotate`` (e.g. ``"20x,-30y"``)
+        are passed to :func:`view_matrix`.
+    perspective : float, optional
+        Camera distance in Å; orthographic if None.
+    style : str or Style
+        Preset name (see :func:`style`); extra keyword arguments change Style fields.
+    mode : {"ballstick", "spacefill", "sticks"}
+    depth_cue : bool
+        Fade and shrink atoms with depth.
+    color_by : str or array, optional
+        ``"z"``, ``"coordination"``, the name of a per-atom array or an array.
+        ``cmap``, ``vmin``, ``vmax`` and ``norm`` work as in matplotlib.
+    highlight : list or dict, optional
+        Ids drawn unfaded with a heavier outline, or ``{id: colour}``.
+        ``highlight_front`` puts them on top of everything.
+    layers : dict, optional
+        ``{symbol: int}``; lower layers are drawn first regardless of depth.
+    bonds : bool or list
+        Find bonds, draw none, or draw exactly the given ``(id_a, id_b)`` pairs.
+        ``cutoffs`` overrides pair cutoffs, e.g. ``{"Mo-S": 2.85}``.
+    bond_orders : bool or dict
+        Guess double/triple bonds (or use RDKit's), or ``{(id_a, id_b): order}``.
+    bond_styles : dict, optional
+        ``{(id_a, id_b): "breaking" | "forming" | "dashed" | "hidden"}`` or a dict of
+        ``color``, ``width``, ``dashed``, ``hidden``.
+    contacts : "hbonds" or list, optional
+        Extra dashed contacts.
+    pbc_bonds : bool, optional
+        Half-bonds across periodic boundaries; follows the structure by default.
+    vectors : array or str, optional
+        (N, 3) arrows, or the name of a per-atom array such as ``"forces"``.
+    trails : dict, optional
+        Motion trails, see :func:`inkatoms.layers.trails`.
+    polyhedra, rings : bool or dict, optional
+        Coordination polyhedra and filled rings.
+    labels : str, list or dict, optional
+        ``"symbol"``, ``"id"``, ``"index"``, ``"value"``, a list or ``{id: text}``;
+        ``label_kw`` goes to ``ax.text``.
+    constraints : bool or list, optional
+        Mark fixed atoms (True uses ASE's FixAtoms).
+    vacancies : (M, 3) array, optional
+    ghosts : float, optional
+        Show periodic images within this distance (Å) of the cell, faded.
+    boundary : bool
+        Repeat atoms on cell faces, edges and corners.
+    cell, cell_vectors, planes : optional
+        Cell outline, a/b/c arrows and lattice planes such as ``[(1, 1, 1)]``.
+    radii : dict, optional
+        ``{symbol: radius}`` in Å.
+    depth_range : (far, near), optional
+        Fix the fade range, e.g. across trajectory panels.
+    scale : float, optional
+        Inches per Å, see :func:`set_scale`.
+    rasterized : bool or "auto"
+    editable : bool
+        One patch per piece, with SVG ids such as ``atom-12``.
 
-    Look
-      style        jmol | cpk | vesta | colourblind | greyscale | bw | dark, or a Style;
-                   extra keyword arguments change style fields (shading="soft", ...)
-      mode         ballstick | spacefill | sticks
-      depth_cue    False draws every atom at full colour and size (no fade, no
-                   shrink); the style's depth_fade / depth_shrink tune it when on
-      color_by     colour atoms by a value: "z", "coordination", an array name
-                   ("charges", "forces", ...) or an array; cmap, vmin, vmax, norm as
-                   in matplotlib; then inkatoms.colorbar(artist)
-      highlight    ids drawn unfaded with a heavier outline, or {id: colour};
-                   highlight_front=True keeps them on top of everything
-      layers       {symbol: int}: draw lower layers first whatever their depth (atoms
-                   within a layer still sort and fade by depth), e.g. {"S": 0, "Mo": 1,
-                   "H": 2} keeps a Mo network and adsorbed H visible in a dense slice
-
-    Bonds
-      bonds, cutoffs, bond_scale   bonds=True finds bonds (cutoffs={"Mo-S": 2.85}
-                   overrides pairs, in Å), False draws none, or give an explicit list
-                   of bonded id pairs [(id_a, id_b), ...] to draw exactly those
-      bond_orders  True guesses double/triple bonds (or uses known RDKit orders),
-                   or {(id_a, id_b): order}; order 1.5 is drawn as solid + dashed
-      bond_styles  {(id_a, id_b): "breaking" | "forming" | "dashed" | "hidden" or
-                   dict(color=, width=, dashed=, hidden=)}
-      contacts     extra dashed contacts: "hbonds" or [(id_a, id_b), ...]
-      pbc_bonds    draw half-bonds across periodic boundaries (default: follow pbc)
-
-    Extras
-      vectors      per-atom arrows: array (N, 3) or an array name ("forces"),
-                   scaled by vector_scale; vector_color ("atom" for element colour);
-                   vectors_front=True draws them over everything
-      trails       motion trails from a trajectory: dict(frames=, ids=[...] | "mobile",
-                   n=, smooth=, color="atom" | "time" | colour, width=, fade=)
-      polyhedra    True (metal-centred) or dict(centers=, ligands=, alpha=, color=,
-                   edgecolor=, hide_bonds=, min_ligands=)
-      rings        True or dict(color=, alpha=, aromatic="auto"|True|False, max_size=)
-      labels       "symbol" | "id" | "index" | "value" | list | {id: text}; label_kw
-                   passed to ax.text (fontsize, color="auto", offset=(dx, dy), ...)
-      constraints  True (ASE FixAtoms) or ids: a cross on fixed atoms
-      vacancies    (M, 3) positions drawn as dashed empty circles
-      ghosts       width (Å): periodic images outside the cell drawn faded
-      boundary     repeat atoms on cell faces/edges/corners (as VESTA does)
-      cell, cell_vectors, planes   cell outline; labelled a/b/c arrows; lattice
-                   planes [(1, 1, 1), {"hkl": (0, 0, 1), "offset": 0.5, "color": ...}]
-
-    Output
-      radii        {symbol: radius in Å}; depth_range=(far, near) fixes the fade
-      scale        inches per Å (see set_scale)
-      rasterized   True / False / "auto" (rasterize very large drawings)
-      editable     one patch per piece with gids like "atom-12" (for Illustrator)
+    Returns
+    -------
+    StructureArtist
     """
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}")
@@ -179,7 +181,6 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
     if not depth_cue:
         st = st.replace(depth_fade=0.0, depth_shrink=0.0)
 
-    # ---- periodic images
     if ghosts or boundary:
         if s.cell is None:
             raise ValueError("ghosts/boundary need a structure with a unit cell")
@@ -188,7 +189,7 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
     is_image = np.asarray(s.arrays.get("_image", np.zeros(len(s), bool)), bool)
     ghost_fade = 0.6 if ghosts else 0.0
     extra_fade = np.where(is_image, ghost_fade, 0.0)
-    if "_fade" in s.arrays:              # per-atom extra fade, e.g. the ghosts of a comparison
+    if "_fade" in s.arrays:
         extra_fade = np.maximum(extra_fade, np.asarray(s.arrays["_fade"], float))
 
     if isinstance(view, str) and view == "auto":
@@ -198,7 +199,6 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
     bg = np.array(to_rgb(st.background))
     scene = Scene(s.positions, R, st, perspective, depth_range, bg)
 
-    # ---- radii (Å, before depth shrink)
     vdw = np.array([DATA[x][1] for x in s.symbols])
     if mode == "spacefill":
         r3 = vdw.copy()
@@ -208,22 +208,21 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
         r3 = st.ball_scale * vdw
     for sym, rad in (radii or {}).items():
         r3[s.symbols == sym] = rad
-    if "_scale" in s.arrays:             # per-atom radius factor (e.g. comparison ghosts)
+    if "_scale" in s.arrays:
         r3 = r3 * np.asarray(s.arrays["_scale"], float)
 
     if layers or "_layer" in s.arrays:
         scene.atom_layer = np.array([(layers or {}).get(sym, 0) for sym in s.symbols], float)
-        if "_layer" in s.arrays:         # per-atom layer offsets
+        if "_layer" in s.arrays:
             scene.atom_layer = scene.atom_layer + np.asarray(s.arrays["_layer"], float)
     hl, hl_colours = _highlight(s, highlight)
     xy, depth, f_atom = scene.project(s.positions) if n else (np.zeros((0, 2)), np.zeros(0), np.zeros(0))
     t_atom = np.where(hl, 1.0, scene.t(depth))
     k_atom = scene.k(t_atom)
-    r_eff = r3 * k_atom * np.where(hl, st.highlight_scale, 1.0)   # 3D radius used for clipping
-    rr = r_eff * f_atom                                           # drawn radius on the page
+    r_eff = r3 * k_atom * np.where(hl, st.highlight_scale, 1.0)   # bonds are clipped at this
+    rr = r_eff * f_atom
     fade_atom = scene.fade(t_atom, extra_fade)
 
-    # ---- colours
     base = np.array([st.color(x) for x in s.symbols]) if n else np.zeros((0, 3))
     values = atom_values(s, color_by, cutoffs=cutoffs, bond_scale=bond_scale)
     mappable = None
@@ -252,7 +251,7 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
     _layers.find_bond_list(ctx, bonds=bonds, mode=mode, polyhedra=polyhedra, rings=rings,
                            contacts=contacts, cutoffs=cutoffs, bond_scale=bond_scale,
                            pbc_bonds=pbc_bonds)
-    _layers.polyhedra(ctx, polyhedra)          # before bonds: it hides centre-ligand bonds
+    _layers.polyhedra(ctx, polyhedra)   # must run before bonds()
     _layers.bonds(ctx, bond_orders=bond_orders, bond_styles=bond_styles)
     _layers.contacts(ctx, contacts)
     _layers.rings(ctx, rings)
@@ -262,7 +261,7 @@ def draw(ax, atoms, *, view="z", up=None, rotate=None, perspective=None,
     _layers.cell(ctx, cell=cell, cell_vectors=cell_vectors, planes=planes)
     extras = ctx.extras
 
-    # ---- assemble, back to front
+    # back to front
     items = scene.items
     if rasterized == "auto":
         rasterized = len(items) > AUTO_RASTERIZE

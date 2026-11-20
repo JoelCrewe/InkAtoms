@@ -1,16 +1,4 @@
-"""Colour schemes and drawing styles.
-
-Presets
--------
-jmol       Jmol element colours (S yellow, O red, N blue, C grey, H white, ...)
-cpk        classic CPK model colours (C near-black, O red, N blue, S yellow, ...)
-vesta        VESTA element colours
-colourblind  common elements on the Okabe-Ito palette, distinguishable with
-             colour-vision deficiency (metals sky blue, C dark grey, ...)
-greyscale    Jmol colours mapped to grey by luminance, dark outlines; prints well
-bw           black-and-white line art: white atoms, black outlines and bonds
-dark         Jmol colours on a dark background (slides), fading towards it
-"""
+"""Colour schemes and drawing styles."""
 
 from __future__ import annotations
 
@@ -21,8 +9,6 @@ import numpy as np
 from matplotlib.colors import to_rgb
 
 from ._elements import DATA, SYMBOLS, VESTA
-
-# ---------------------------------------------------------------- schemes
 
 _ALKALI = {"Li", "Na", "K", "Rb", "Cs", "Fr"}
 _ALKALINE_EARTH = {"Be", "Mg", "Ca", "Sr", "Ba", "Ra"}
@@ -52,7 +38,7 @@ def _grey(symbol):
     return (v, v, v)
 
 
-# Okabe & Ito (2008) colour-blind-safe palette on the common elements
+# Okabe & Ito (2008) palette
 _CB = {"H": "#ffffff", "C": "#505050", "N": "#0072b2", "O": "#d55e00", "S": "#f0e442",
        "P": "#e69f00", "F": "#009e73", "Cl": "#009e73", "Br": "#8c4a2f", "I": "#cc79a7",
        "Si": "#b3a17a", "B": "#f5b7a1", "Se": "#e3b505"}
@@ -82,44 +68,43 @@ def scheme_colors(scheme="jmol"):
     return {s: SCHEMES[scheme](s) for s in SYMBOLS}
 
 
-# ---------------------------------------------------------------- style
-
 @dataclass(frozen=True)
 class Style:
-    """Everything about how atoms, bonds and the cell are drawn.
+    """How atoms, bonds and the cell are drawn.
 
-    Lengths marked Å are in structure units, so they scale with the picture;
-    line widths are in points.
+    Lengths are in Å (they scale with the drawing), line widths in points.
+    ``"darker"`` as an edge colour means a darker shade of the face colour.
+    ``fade_distance`` fades over a fixed distance behind the front atom instead of
+    over the whole depth of the structure.
     """
 
-    scheme: str = "jmol"                 # base element colours (jmol, cpk, grey, white)
-    colors: Mapping[str, object] = field(default_factory=dict)  # per-element overrides
-    ball_scale: float = 0.27             # ball radius = ball_scale x van der Waals radius
-    atom_edgecolor: object = "darker"    # "darker" (of the face colour) or a colour
-    edge_colors: Mapping[str, object] = field(default_factory=dict)  # per-element outline overrides
-    atom_edgewidth: float = 0.6          # pt
-    bond_color: object = "split"         # "split" (each half takes its atom's colour) or a colour
-    bond_width: float = 0.26             # Å
+    scheme: str = "jmol"
+    colors: Mapping[str, object] = field(default_factory=dict)
+    ball_scale: float = 0.27        # x van der Waals radius
+    atom_edgecolor: object = "darker"
+    edge_colors: Mapping[str, object] = field(default_factory=dict)
+    atom_edgewidth: float = 0.6
+    bond_color: object = "split"    # "split": each half in its atom's colour
+    bond_width: float = 0.26
     bond_edgecolor: object = "darker"
-    bond_edgewidth: float = 0.5          # pt
-    darken: float = 0.45                 # how much darker "darker" edges are (0-1)
-    shading: str = "flat"                # flat | glossy | soft
-    depth_fade: float = 0.45             # how far the back fades towards the background (0-1)
-    depth_shrink: float = 0.12           # how much smaller the back is drawn (0-1)
-    fade_distance: float | None = None   # Å: fade over this distance behind the front atom
-                                         # (None: from the nearest to the farthest atom)
-    background: object = "white"         # colour faded towards
-    highlight_edgewidth: float = 1.4     # pt, for highlighted atoms
-    highlight_edgecolor: object = None   # None: same rule as atom_edgecolor; or "darker" / a colour
-    highlight_scale: float = 1.0         # radius factor for highlighted atoms
+    bond_edgewidth: float = 0.5
+    darken: float = 0.45
+    shading: str = "flat"           # flat, glossy or soft
+    depth_fade: float = 0.45
+    depth_shrink: float = 0.12
+    fade_distance: float | None = None
+    background: object = "white"
+    highlight_edgewidth: float = 1.4
+    highlight_edgecolor: object = None
+    highlight_scale: float = 1.0
     cell_color: object = "#555555"
-    cell_width: float = 0.05             # Å
-    occlusion: float = 0.0               # 0-1: darken buried atoms (fake ambient occlusion)
-    dash_length: float = 0.16            # Å, for dashed bonds and contacts
-    dash_gap: float = 0.11               # Å
-    contact_color: object = "#6f6f6f"    # dashed contacts / hydrogen bonds
-    contact_width: float = 0.08          # Å
-    vacancy_radius: float = 0.45         # Å
+    cell_width: float = 0.05
+    occlusion: float = 0.0
+    dash_length: float = 0.16
+    dash_gap: float = 0.11
+    contact_color: object = "#6f6f6f"
+    contact_width: float = 0.08
+    vacancy_radius: float = 0.45
 
     def color(self, symbol):
         c = self.colors.get(symbol)
@@ -154,7 +139,10 @@ _ALIASES = {"grayscale": "greyscale", "grey": "greyscale", "gray": "greyscale",
 
 
 def style(name="jmol", **changes) -> Style:
-    """A preset Style by name (jmol, cpk, greyscale, bw), with any fields changed.
+    """Return a preset Style, optionally with some fields changed.
+
+    Presets: ``jmol`` (default), ``cpk``, ``vesta``, ``colourblind`` (Okabe-Ito colours for
+    common elements), ``greyscale``, ``bw`` (black-and-white line art) and ``dark``.
 
     >>> style("cpk", shading="soft", colors={"Mo": "#54b5b5"})
     """
@@ -167,8 +155,6 @@ def style(name="jmol", **changes) -> Style:
         base = PRESETS[key]
     return base.replace(**changes) if changes else base
 
-
-# ---------------------------------------------------------------- colour maths
 
 def mix(rgb, target, f):
     """Blend colours towards target by fraction f (arrays broadcast)."""

@@ -1,5 +1,4 @@
-"""Hover over a drawing to see atom ids; click to collect them (Jupyter %matplotlib widget,
-or any interactive backend)."""
+"""Hover to see atom ids, click to collect them (needs an interactive backend)."""
 
 from __future__ import annotations
 

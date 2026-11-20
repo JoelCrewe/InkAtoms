@@ -1,15 +1,8 @@
-"""Follow atoms between frames when ids are missing or unreliable.
+"""Link atoms between frames when ids are missing or unreliable.
 
-link() matches each frame to the previous one, element by element, with an
-optimal assignment (as in particle tracking). The cost of linking an atom to a
-track comes either from distances (to the track's last position, or to where
-it would be if it kept its velocity), or from a LinkModel: a small logistic
-regression trained on frames that do carry true ids, which learns how much to
-trust predicted position, plain distance and changes in local bonding.
-
-Atoms with no plausible partner within max_jump start new tracks; tracks that
-find no partner are kept for `memory` frames, so an atom that briefly leaves a
-cropped region (or is missed) can be picked up again.
+Each frame is matched to the previous one per element by linear assignment, as in
+particle tracking (cf. trackpy, LapTrack). The cost is a distance, or -log P(match)
+from a logistic model trained on frames that do have ids.
 """
 
 from __future__ import annotations
@@ -96,7 +89,7 @@ def _features_and_labels(structs, species, cutoffs, bond_scale, stride, k_neg):
                 X.append(F[t_idx, c_idx])
                 y.append(1)
                 sy.append(sym)
-                near = np.argsort(F[t_idx, :, 1])[:k_neg + 1]     # the closest wrong candidates
+                near = np.argsort(F[t_idx, :, 1])[:k_neg + 1]     # hard negatives
                 for c in near:
                     if c != c_idx:
                         X.append(F[t_idx, c])
@@ -121,7 +114,7 @@ def _fit_logistic(X, y, l2, iterations):
 
 
 class LinkModels(dict):
-    """One LinkModel per element (H hops further than Mo, so they need different weights)."""
+    """LinkModels per element, with ``"*"`` as the fallback."""
 
     species: list = []
 
@@ -134,9 +127,10 @@ class LinkModels(dict):
 
 def fit_link_model(frames, *, ids="uid", cutoffs=None, bond_scale=1.15, stride=1, k_neg=4, l2=1e-3,
                    iterations=50, per_element=True, min_examples=200):
-    """Learn how to link atoms from frames that carry true ids (logistic regression,
-    Newton iterations), one model per element unless per_element=False.
-    stride: train for linking frames this far apart (match how you will use it)."""
+    """Fit logistic linking models on frames that have true ids.
+
+    ``stride`` should match the frame spacing you will link at.
+    """
     structs, _ = as_frames(frames, ids=ids)
     species = sorted(set().union(*[set(s.symbols) for s in structs]))
     X, y, sy = _features_and_labels(structs, species, cutoffs, bond_scale, stride, k_neg)
@@ -165,15 +159,21 @@ class LinkResult:
 
 def link(frames, *, method="velocity", model=None, max_jump=1.5, memory=3, cutoffs=None, bond_scale=1.15,
          ids=None):
-    """Give atoms consistent ids across frames by linking each frame to the last.
+    """Assign consistent ids by linking each frame to the previous one.
 
-    method   "distance"  cost = distance to the track's last position
-             "velocity"  cost = distance to where the track would be at constant velocity
-             "learned"   cost = -log P(match) from a LinkModel (fit_link_model on frames
-                         with true ids, e.g. an earlier part of the same run)
-    max_jump links longer than this (Å) are not allowed: the atom starts a new track
-    memory   frames a track waits for its atom before it is closed
-    Returns a LinkResult whose .frames are Structures with the new ids.
+    Parameters
+    ----------
+    method : {"distance", "velocity", "learned"}
+        Cost: distance to the last position, distance to the constant-velocity
+        prediction, or -log P(match) from :func:`fit_link_model`.
+    max_jump : float
+        Longest allowed link (Å); otherwise a new track starts.
+    memory : int
+        Frames a track is kept open without a match.
+
+    Returns
+    -------
+    LinkResult
     """
     structs, _ = as_frames(frames, ids=ids)
     if method == "learned" and model is None:
@@ -182,7 +182,7 @@ def link(frames, *, method="velocity", model=None, max_jump=1.5, memory=3, cutof
     first = structs[0]
     next_id = len(first)
     out = [first.copy(ids=np.arange(len(first)))]
-    # live tracks: id -> (symbol, position, velocity, env, frames missing)
+    # id -> (symbol, position, velocity, env, frames missing)
     env0 = _coordination_vectors(first, species, cutoffs, bond_scale)
     tracks = {k: (first.symbols[k], first.positions[k], np.zeros(3), env0[k], 0) for k in range(len(first))}
     result = LinkResult(frames=out)
@@ -211,7 +211,6 @@ def link(frames, *, method="velocity", model=None, max_jump=1.5, memory=3, cutof
             ok = C[r, c] < _BIG
             for ti, ci in zip(r[ok], c[ok]):
                 new_ids[ca[ci]] = tids[ti]
-        # update tracks
         seen = set()
         for row, tid in enumerate(new_ids):
             if tid < 0:

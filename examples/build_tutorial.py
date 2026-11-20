@@ -76,7 +76,12 @@ from ase import Atoms
 from ase.build import molecule, bulk, fcc111, mx2, add_adsorbate
 from ipywidgets import interact
 
-import inkatoms as ia
+try:
+    import inkatoms as ia
+except ImportError:
+    raise ImportError("inkatoms is not installed in this kernel. Pick the kernel of the environment "
+                      "where you installed it (Kernel > Change kernel), or run: "
+                      '%pip install "inkatoms[all]" ipywidgets') from None
 
 plt.rcParams["figure.dpi"] = 110
 print("inkatoms", ia.__version__, "is ready")

@@ -1,17 +1,7 @@
-"""Optional machine-learning extras: local-environment descriptors, and
-environment states and changes along a trajectory.
+"""Local-environment descriptors and environment states along a trajectory.
 
-Two descriptors are available:
-
-fingerprint  built in, no extra dependencies: for each neighbouring element, a set
-             of smooth radial functions (Gaussians on a grid of distances, with a
-             cosine cutoff), as in Behler-Parrinello G2 symmetry functions
-soap         SOAP power spectra from dscribe (pip install "inkatoms[ml]"), which also
-             capture angles
-
-Environment states come from clustering every atom's descriptor over all frames
-(k-means), so "an S that stops being a mu2 bridge" shows up as a change of state
-even when no single bond crosses its cutoff at that moment.
+``fingerprint`` is a radial descriptor per neighbour element (Behler-Parrinello G2 style);
+``soap`` needs dscribe. States are k-means clusters of the descriptors over all frames.
 """
 
 from __future__ import annotations
@@ -76,16 +66,15 @@ class EnvironmentStates:
     """Environment state of each tracked atom in each frame (-1 where absent)."""
 
     ids: list
-    labels: np.ndarray        # (n_frames, n_ids) int
-    centroids: np.ndarray     # (n_states, n_features), in standardised descriptor units
+    labels: np.ndarray        # (n_frames, n_ids)
+    centroids: np.ndarray
     times: np.ndarray | None
 
     def series(self, atom_id):
         return self.labels[:, self.ids.index(int(atom_id))]
 
     def describe(self, frames, *, cutoffs=None, id_key="uid", bond_scale=1.15):
-        """A readable name for each state from the average neighbour counts of the
-        atoms while they are in it, e.g. {0: "1.0 Mo + 2.0 H", ...}."""
+        """Name each state by its mean neighbour counts, e.g. ``{0: "1.0 Mo + 2.0 H"}``."""
         from .events import neighbour_counts
 
         sums = {}
@@ -103,8 +92,7 @@ class EnvironmentStates:
         return out
 
     def debounced(self, atom_id, min_frames=5):
-        """The state series with flicker removed: a change only takes effect once
-        the new state has lasted min_frames frames (as environment_events counts it)."""
+        """State series with changes shorter than ``min_frames`` removed."""
         from .events import _debounced_changes
 
         raw = self.series(atom_id)
@@ -118,8 +106,7 @@ class EnvironmentStates:
 
 def environment_states(frames, ids, *, n_states=4, method="fingerprint", id_key="uid", species=None,
                        seed=0, **kwargs):
-    """Cluster the local environments of the given atoms over all frames into
-    n_states states (k-means on standardised descriptors)."""
+    """k-means clustering of the atoms' descriptors over all frames."""
     structs, times = as_frames(frames, ids=id_key)
     ids = [int(i) for i in np.atleast_1d(ids)]
     if species is None:
@@ -132,7 +119,7 @@ def environment_states(frames, ids, *, n_states=4, method="fingerprint", id_key=
             feats.append(descriptors(s, rows, method=method, species=species, **kwargs))
             where.extend((f, ids.index(int(s.ids[r]))) for r in rows)
     X = np.vstack(feats)
-    # standardise, but do not blow up features that barely vary (noise would dominate)
+    # floor the scale so near-constant features don't turn into noise
     mu, sd = X.mean(axis=0), X.std(axis=0)
     sd = np.maximum(sd, 0.1 * sd.max() + 1e-12)
     Z = (X - mu) / sd

@@ -16,7 +16,7 @@ from ase.optimize import BFGS
 
 import inkatoms as ia
 
-# a scripted reaction: H2S loses one H, then the SH drifts away from a surface S
+# fake trajectory: H2S loses an H, then the SH leaves a surface S
 rng = np.random.default_rng(0)
 frames = []
 for f in range(60):

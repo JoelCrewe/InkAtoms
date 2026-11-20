@@ -1,5 +1,4 @@
-"""The internal structure container and converters from ASE, pymatgen, RDKit,
-MDAnalysis and plain arrays."""
+"""Structure container and converters from ASE, pymatgen, RDKit and MDAnalysis."""
 
 from __future__ import annotations
 
@@ -15,22 +14,29 @@ from ._elements import DATA
 class Structure:
     """Atoms as plain arrays.
 
-    ids are carried through every selection, so an atom keeps the same id
-    after cropping and highlights can refer to the original indices.
-
-    arrays      extra per-atom data, e.g. {"charges": (N,), "forces": (N, 3),
-                "fixed": (N,) bool}; used by color_by=, vectors= and constraints=
-    occupancy   per site, None or ((symbol, fraction), ...) for partially
-                occupied / mixed sites (drawn as pie charts)
-    bond_orders {(id_a, id_b): order} known bond orders (e.g. from RDKit)
+    Attributes
+    ----------
+    symbols, positions : (N,) str and (N, 3) float arrays (Å)
+    cell : (3, 3) array of lattice vectors (rows), or None
+    pbc : (3,) bool
+    ids : (N,) int
+        Kept through every selection, so highlights still refer to the original atoms.
+    origin : (3,) float
+        Corner of the cell.
+    arrays : dict
+        Extra per-atom data, e.g. ``charges``, ``forces`` or ``fixed``.
+    occupancy : tuple or None
+        Per site, None or ``((symbol, fraction), ...)`` for mixed sites.
+    bond_orders : dict or None
+        Known bond orders ``{(id_a, id_b): order}``, e.g. from RDKit.
     """
 
-    symbols: np.ndarray             # (N,) str
-    positions: np.ndarray           # (N, 3) float, Å
-    cell: np.ndarray | None = None  # (3, 3) rows are lattice vectors, or None
-    pbc: np.ndarray = None          # (3,) bool
-    ids: np.ndarray = None          # (N,) int
-    origin: np.ndarray = None       # (3,) corner of the cell, Å
+    symbols: np.ndarray
+    positions: np.ndarray
+    cell: np.ndarray | None = None
+    pbc: np.ndarray = None
+    ids: np.ndarray = None
+    origin: np.ndarray = None
     arrays: dict = field(default_factory=dict)
     occupancy: tuple | None = None
     bond_orders: dict | None = None
@@ -196,11 +202,14 @@ def _from_mdanalysis(obj, ids):
 
 
 def as_structure(obj, *, ids=None) -> Structure:
-    """Convert to a Structure from: ASE Atoms, pymatgen Structure/Molecule
-    (partial occupancies kept), RDKit Mol with a conformer (bond orders kept),
-    MDAnalysis Universe/AtomGroup, a (symbols, positions) pair, or a Structure.
+    """Convert ASE, pymatgen, RDKit or MDAnalysis objects (or ``(symbols, positions)``)
+    to a Structure.
 
-    ids: per-atom ids, or (for ASE) the name of a per-atom array such as "uid".
+    Parameters
+    ----------
+    obj : Atoms, Structure, Molecule, Mol, Universe or tuple
+    ids : array or str, optional
+        Per-atom ids, or the name of an ASE per-atom array such as ``"uid"``.
     """
     if isinstance(obj, Structure):
         return obj if ids is None else obj.copy(ids=ids)
@@ -220,10 +229,9 @@ def as_structure(obj, *, ids=None) -> Structure:
 
 
 def from_smiles(smiles, *, add_hydrogens=True, seed=0, optimise=True, kekulize=True) -> Structure:
-    """3D structure from a SMILES string via RDKit (pip install rdkit).
+    """Build a 3D structure from SMILES with RDKit, keeping its bond orders.
 
-    Bond orders come from RDKit, so draw(..., bond_orders=True) shows them
-    exactly; kekulize=False keeps aromatic bonds as order 1.5 (drawn dashed).
+    With ``kekulize=False`` aromatic bonds keep order 1.5 (drawn half dashed).
     """
     try:
         from rdkit import Chem

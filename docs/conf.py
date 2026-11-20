@@ -1,4 +1,4 @@
-"""Sphinx configuration for the inkatoms documentation."""
+"""Sphinx configuration."""
 import os
 import sys
 
@@ -31,13 +31,3 @@ sphinx_gallery_conf = {
     "remove_config_comments": True,
 }
 
-
-def _plain_docstrings(app, what, name, obj, options, lines):
-    """The docstrings are written as aligned plain text; show them preformatted."""
-    if lines:
-        body = ["    " + line for line in lines]
-        lines[:] = ["::", ""] + body + [""]
-
-
-def setup(app):
-    app.connect("autodoc-process-docstring", _plain_docstrings)

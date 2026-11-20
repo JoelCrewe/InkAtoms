@@ -66,7 +66,7 @@ def _repel(pos, sizes, anchors, iterations=80):
                     pos[a, axis] -= sign * push
                     pos[b, axis] += sign * push
                     moved = True
-        pos += 0.02 * (anchors - pos)   # weak pull back towards the atoms
+        pos += 0.02 * (anchors - pos)
         if not moved:
             break
     return pos

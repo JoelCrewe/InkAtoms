@@ -1,8 +1,4 @@
-"""Viewing directions and the orthographic projection onto the page.
-
-Screen frame: x to the right, y up the page, z out of the page towards the
-viewer. Larger screen z means closer to the viewer (drawn later, faded less).
-"""
+"""View directions and projection. Page frame: x right, y up, z towards the viewer."""
 
 from __future__ import annotations
 
@@ -60,16 +56,16 @@ def parse_rotation(rotate) -> np.ndarray:
 
 
 def view_matrix(view="z", *, up=None, rotate=None) -> np.ndarray:
-    """Rotation whose rows are the page's right, up and out directions in
-    structure coordinates.
+    """Rotation matrix whose rows are the page's right, up and out directions.
 
-    view: the structure direction that points out of the page at the viewer,
-          as "x", "-y", ... or a 3-vector. "z" is a top view (x right, y up);
-          "-y" is the usual side view (x right, z up). A 3x3 matrix is taken
-          as the full rotation.
-    up:   structure direction to point up the page (default z, or y when
-          looking along z).
-    rotate: extra rotations about the page axes, e.g. "15x,-30y".
+    Parameters
+    ----------
+    view : str, vector or (3, 3) matrix
+        Direction pointing out of the page, e.g. ``"z"`` (top view) or ``"-y"`` (side view).
+    up : str or vector, optional
+        Direction to point up the page; z by default (y when looking along z).
+    rotate : str, optional
+        Further rotations about the page axes, e.g. ``"15x,-30y"``.
     """
     if not isinstance(view, str) and np.asarray(view).shape == (3, 3):
         base = np.asarray(view, dtype=float)
@@ -96,7 +92,7 @@ def auto_view(positions) -> np.ndarray:
     p = p - p.mean(axis=0)
     _, vecs = np.linalg.eigh(p.T @ p)      # ascending variance
     right, up, out = vecs[:, 2], vecs[:, 1], vecs[:, 0]
-    # make the choice deterministic: right and up lean towards +x / +z
+    # fix the signs so the result is reproducible
     if right @ np.array([1, 0.01, 0.001]) < 0:
         right = -right
     if up @ np.array([0.001, 0.01, 1]) < 0:

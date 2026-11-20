@@ -1,5 +1,4 @@
-"""Cropping, centring and tiling. Every function returns a new Structure and
-keeps atom ids, so highlights still refer to the original atoms."""
+"""Cropping, centring and tiling. Atom ids are kept."""
 
 from __future__ import annotations
 
@@ -126,7 +125,7 @@ def images(atoms, width=1.5, *, tol=1e-3):
         raise ValueError("images needs a structure with a unit cell")
     inv = np.linalg.inv(s.cell)
     frac = (s.positions - s.origin) @ inv
-    # width in fractional units along each axis (distance between opposite faces)
+    # fractional width along each axis
     vol = abs(np.linalg.det(s.cell))
     heights = np.array([vol / np.linalg.norm(np.cross(s.cell[(k + 1) % 3], s.cell[(k + 2) % 3]))
                         for k in range(3)])
@@ -184,7 +183,7 @@ def make_whole(atoms, **bond_kwargs):
                     image[b] = image[a] + t
                     stack.append(b)
                     members.append(b)
-        # shift the whole cluster so its centre sits in the home cell
+        # put the cluster centre back in the home cell
         members = np.array(members)
         centre = (s.positions[members] + image[members] @ s.cell).mean(axis=0)
         cfrac = (centre - s.origin) @ np.linalg.inv(s.cell)

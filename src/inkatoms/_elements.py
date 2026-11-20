@@ -1,9 +1,7 @@
-"""Element data: symbols, Jmol colours, covalent and van der Waals radii.
+"""Element data, generated from ase.data.
 
-Generated once from ASE (ase.data): covalent radii from Cordero et al.,
-Dalton Trans. 2008; van der Waals radii from Alvarez, Dalton Trans. 2013
-(missing values filled as 1.6 x covalent radius); colours from Jmol
-(grey for elements Jmol does not colour).
+Covalent radii: Cordero et al., Dalton Trans. 2008. Van der Waals radii: Alvarez,
+Dalton Trans. 2013 (1.6 x covalent where missing). Colours: Jmol.
 """
 
 SYMBOLS = (

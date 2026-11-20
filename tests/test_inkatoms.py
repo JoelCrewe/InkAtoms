@@ -19,8 +19,6 @@ def close_figures():
     plt.close("all")
 
 
-# ---------------------------------------------------------------- structure
-
 def test_as_structure_from_arrays():
     s = ia.as_structure(WATER)
     assert len(s) == 3 and list(s.ids) == [0, 1, 2]
@@ -41,8 +39,6 @@ def test_unknown_symbol_rejected():
         Structure(["Xx"], [[0, 0, 0]])
 
 
-# ---------------------------------------------------------------- view
-
 @pytest.mark.parametrize("view", ["x", "-x", "y", "-y", "z", "-z", (1, 1, 1)])
 def test_view_matrix_is_proper_rotation(view):
     R = ia.view_matrix(view, rotate="20x,-35y,5z")
@@ -57,8 +53,6 @@ def test_side_view_axes():
     R = ia.view_matrix("z")
     assert np.allclose(R[0], [1, 0, 0]) and np.allclose(R[1], [0, 1, 0])
 
-
-# ---------------------------------------------------------------- bonds
 
 def test_water_bonds():
     i, j, shift = ia.find_bonds(WATER)
@@ -75,7 +69,7 @@ def test_cutoff_override_and_disable():
 def test_periodic_bonds_simple_cubic():
     s = Structure(["C"], [[0, 0, 0]], cell=np.eye(3) * 1.5, pbc=True)
     i, j, shift = ia.find_bonds(s)
-    # each atom bonds to its 6 images; each bond is counted once
+    # 6 images, each bond counted once
     assert len(i) == 3
     assert {tuple(np.abs(x)) for x in shift} == {(1, 0, 0), (0, 1, 0), (0, 0, 1)}
     assert len(ia.find_bonds(s, pbc=False)[0]) == 0
@@ -86,8 +80,6 @@ def test_coordination_fcc():
     atoms = ase.bulk("Cu", "fcc", a=3.6, cubic=True)
     assert (ia.coordination(atoms) == 12).all()
 
-
-# ---------------------------------------------------------------- select
 
 def test_select_keeps_ids_and_drops_pbc():
     s = Structure(["C"] * 5, [[x, 0, 0] for x in range(5)], cell=np.eye(3) * 10, pbc=True,
@@ -114,8 +106,6 @@ def test_drop_unbonded():
     assert list(select.drop_unbonded(s).ids) == [0, 1, 2]
 
 
-# ---------------------------------------------------------------- styles
-
 @pytest.mark.parametrize("name", ["jmol", "cpk", "greyscale", "bw", "grayscale", "mono"])
 def test_presets_resolve(name):
     st = ia.style(name)
@@ -138,8 +128,6 @@ def test_style_overrides():
     with pytest.raises(TypeError):
         ia.style("jmol", not_a_field=1)
 
-
-# ---------------------------------------------------------------- render
 
 @pytest.mark.parametrize("mode", ["ballstick", "spacefill", "sticks"])
 @pytest.mark.parametrize("shading", ["flat", "glossy", "soft"])
@@ -209,8 +197,6 @@ def test_highlight_front_draws_highlight_last():
     assert np.allclose(art.collection.get_facecolor()[-1][:3], (1, 0, 0))
 
 
-# ---------------------------------------------------------------- bond orders and scale
-
 @pytest.mark.parametrize("name, expected", [
     ("C2H4", {2: 1}), ("C2H2", {3: 1}), ("C6H6", {}), ("HCN", {3: 1}), ("CO2", {2: 2}),
     ("C2H6SO", {2: 1}), ("C4H4S", {2: 2}), ("C5H5N", {}), ("CH3COOH", {2: 1}), ("N2", {3: 1}),
@@ -228,7 +214,7 @@ def test_bond_orders_drawn_and_manual():
     fig, ax = plt.subplots()
     n1 = len(ia.draw(ax, mol, view="auto").collection.get_paths())
     n2 = len(ia.draw(ax, mol, view="auto", bond_orders=True).collection.get_paths())
-    assert n2 == n1 + 2          # the C=C gets a second pair of half-bonds
+    assert n2 == n1 + 2
     n3 = len(ia.draw(ax, mol, view="auto", bond_orders={(0, 1): 3}).collection.get_paths())
     assert n3 == n1 + 4
 

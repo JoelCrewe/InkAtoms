@@ -1,6 +1,6 @@
 # inkatoms
 
-Elegant drawings of atomic structures, made natively in matplotlib. A drawing
+Drawings of atomic structures, made natively in matplotlib. A drawing
 is one depth-sorted vector artist, so it stays sharp in a PDF, can be edited in
 Illustrator or Inkscape, and sits in a figure panel next to your plots with the
 same fonts, axes and annotations.
@@ -31,6 +31,15 @@ same fonts, axes and annotations.
 
 Documentation and gallery: https://joelcrewe.github.io/InkAtoms
 
+## Install
+
+```bash
+pip install inkatoms            # once released on PyPI
+pip install "inkatoms[all]"     # plus ASE, pymatgen, RDKit, MDAnalysis
+```
+
+From a clone: `pip install -e ".[dev]"`.
+
 ## Tutorial
 
 New to inkatoms? [`examples/tutorial.ipynb`](examples/tutorial.ipynb) is a beginner's tour with
@@ -42,14 +51,6 @@ cutting out regions, paper figures, reactions in trajectories and comparing stru
 Locally: `pip install "inkatoms[all]" ipywidgets jupyterlab`, then `jupyter lab examples/tutorial.ipynb`.
 The sliders need a running notebook (Jupyter, VS Code or Colab); GitHub's preview shows the text only.
 
-## Install
-
-```bash
-pip install inkatoms            # once released on PyPI
-pip install "inkatoms[all]"     # plus ASE, pymatgen, RDKit, MDAnalysis
-```
-
-From a clone: `pip install -e ".[dev]"`.
 
 ## Quick start
 

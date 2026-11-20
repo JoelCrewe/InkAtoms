@@ -1,5 +1,4 @@
-"""Compare two structures: match their atoms, align them, and draw the change
-(structure B, with A as faint ghosts and arrows from A to B)."""
+"""Match, align and draw the difference between two structures."""
 
 from __future__ import annotations
 
@@ -14,7 +13,7 @@ from .structure import Structure, as_structure
 
 
 def kabsch(P, Q, weights=None):
-    """Rotation R and translation t minimising |P @ R.T + t - Q| (rows matched)."""
+    """Rotation R and translation t that minimise ``|P @ R.T + t - Q|``."""
     P, Q = np.asarray(P, float), np.asarray(Q, float)
     w = np.ones(len(P)) if weights is None else np.asarray(weights, float)
     w = w / w.sum()
@@ -40,20 +39,24 @@ def _assign(a, b, cost_fn):
 
 def match(a, b, method="auto", *, iterations=4, descriptor="fingerprint", env_weight=1.0, known=None,
           pairs=None):
-    """Pair the atoms of a with those of b; returns (rows_a, rows_b).
+    """Match the atoms of ``a`` to those of ``b``.
 
-    method  "ids"       atoms with the same id (persistent ids, e.g. "uid")
-            "distance"  optimal assignment on distance per element, refined by
-                        aligning and re-matching (for structures without shared ids)
-            "environment"  optimal assignment on local-environment descriptors only
-                        (inkatoms.ml), for structures that are not in the same place;
-                        fails on symmetric structures where many atoms look alike
-            "hybrid"    distance and environment together (env_weight sets the
-                        balance): the most robust when atoms moved by about a bond length
-            "auto"      ids if most ids are shared, else distance
-    known   {id_a: id_b} pairs you are sure of; they are fixed and the method
-            matches only the remaining atoms
-    pairs   a complete mapping [(id_a, id_b), ...] given by you (no matching done)
+    Parameters
+    ----------
+    method : {"auto", "ids", "distance", "environment", "hybrid"}
+        ``"ids"`` pairs equal ids. ``"distance"`` is a per-element linear assignment,
+        re-aligned a few times. ``"environment"`` uses descriptors from
+        :mod:`inkatoms.ml` (unreliable for symmetric structures). ``"hybrid"`` combines
+        distance and environment, weighted by ``env_weight``. ``"auto"`` uses ids if
+        most are shared, otherwise distance.
+    known : dict, optional
+        ``{id_a: id_b}`` pairs to keep fixed; the rest are matched.
+    pairs : list, optional
+        The full mapping ``[(id_a, id_b), ...]``; nothing is matched.
+
+    Returns
+    -------
+    rows_a, rows_b : arrays of matched row indices
     """
     a, b = as_structure(a), as_structure(b)
     if pairs is not None:
@@ -101,7 +104,7 @@ def match(a, b, method="auto", *, iterations=4, descriptor="fingerprint", env_we
         da, db = da / sd, db / sd
         if method == "environment":
             return _assign(a, b, lambda ia, ib: cdist(da[ia], db[ib]))
-        # hybrid: align by distance first, then match on position and environment together
+        # align by distance first, then match on position + environment
         ra, rb = match(a, b, "distance", iterations=iterations)
         R, t = kabsch(a.positions[ra], b.positions[rb])
         pa = a.positions @ R.T + t
@@ -120,9 +123,9 @@ class Comparison:
 
     a: Structure
     b: Structure
-    rows_a: np.ndarray          # matched rows of a ...
-    rows_b: np.ndarray          # ... and the rows of b they correspond to
-    rotation: np.ndarray        # applied to a to align it with b
+    rows_a: np.ndarray
+    rows_b: np.ndarray
+    rotation: np.ndarray        # applied to a
     translation: np.ndarray
     method: str
 
@@ -158,12 +161,11 @@ class Comparison:
 
 
 def compare(a, b, method="auto", *, align=True, align_on=None, ids_a=None, ids_b=None, **match_kwargs):
-    """Match a's atoms to b's, align a onto b (Kabsch), and return a Comparison.
+    """Match the atoms, align ``a`` onto ``b`` (Kabsch) and return a Comparison.
 
-    align_on: ids (in a) to fit the alignment on, e.g. a rigid substrate, so the
-    displacement shows how the rest moved relative to it.
-    ids_a, ids_b: which ids identify atoms in each structure: an array, or the name of
-    a per-atom array (e.g. "uid") for ASE input. known= and pairs= go to match().
+    ``align_on`` restricts the fit to some ids of ``a`` (e.g. a fixed substrate).
+    ``ids_a`` / ``ids_b`` choose the ids of each structure (an array, or an ASE array
+    name such as ``"uid"``). Other keywords go to :func:`match`.
     """
     a, b = as_structure(a, ids=ids_a), as_structure(b, ids=ids_b)
     used = method if method != "auto" else None
@@ -187,16 +189,24 @@ def draw_comparison(ax, a, b, *, comparison=None, method="auto", align=True, ali
                     arrows=True, arrow_scale=1.0, arrow_max=None, min_shift=0.15, color_by="shift",
                     cmap="magma_r",
                     vmin=0.0, vmax=None, arrow_color="#333333", cutoffs=None, bond_scale=1.15, **draw_kwargs):
-    """Draw b with a as faint ghosts and arrows showing how each atom moved.
+    """Draw ``b`` over faded copies of ``a``, with arrows for atoms that moved.
 
-    ghost      how far a's atoms fade (0 = as strong as b, 1 = invisible); they are
-               drawn behind b and ghost_scale times smaller
-    min_shift  shifts below this (Å) get no arrow
-    arrow_scale, arrow_max  arrows are arrow_scale x the shift, capped at arrow_max Å
-               (so one atom that moved far does not swamp small relaxations)
-    color_by   "shift" colours b's atoms by how far they moved (with a colorbar via
-               inkatoms.colorbar), None keeps element colours
-    Other keyword arguments go to draw(). Returns (artist, comparison).
+    Parameters
+    ----------
+    ghost, ghost_scale : float
+        Fade (0-1) and size factor of ``a``'s atoms, which are drawn behind ``b``.
+    min_shift : float
+        No arrow for shifts below this (Å).
+    arrow_scale, arrow_max : float
+        Arrow length is ``arrow_scale`` x the shift, capped at ``arrow_max`` Å.
+    color_by : "shift" or None
+        Colour ``b``'s atoms by how far they moved, or keep element colours.
+    **draw_kwargs
+        Passed to :func:`draw`.
+
+    Returns
+    -------
+    (StructureArtist, Comparison)
     """
     from .render import draw
 
@@ -210,9 +220,9 @@ def draw_comparison(ax, a, b, *, comparison=None, method="auto", align=True, ali
     fade = np.zeros(len(both))
     fade[nb:] = ghost
     layer = np.zeros(len(both))
-    layer[nb:] = -1.0                    # ghosts behind the new structure ...
+    layer[nb:] = -1.0                    # ghosts behind, and smaller
     scale = np.ones(len(both))
-    scale[nb:] = ghost_scale             # ... and a little smaller, so they never hide it
+    scale[nb:] = ghost_scale
     shift = np.full(len(both), np.nan)
     shift[cmp_.rows_b] = cmp_.shift
     vec = np.zeros((len(both), 3))

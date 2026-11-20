@@ -15,12 +15,10 @@ def read_cube(path):
 
 def sample_plane(art, data, cell, *, origin=(0.0, 0.0, 0.0), depth=None, resolution=0.05,
                  periodic=True):
-    """Sample a 3D grid on the page plane of a drawing.
+    """Sample a 3D grid (spanning ``cell`` from ``origin``) on the page plane.
 
-    data    3D array on a grid spanning `cell` (rows are lattice vectors) from `origin`
-    depth   position of the slice along the view direction (Å, page depth
-            coordinate); default through the centre of the drawn atoms
-    Returns (X, Y, V) for contour/contourf in page coordinates.
+    ``depth`` places the slice along the view direction; by default it goes through the
+    centre of the drawn atoms. Returns ``(X, Y, V)`` for ``contour``/``contourf``.
     """
     data = np.asarray(data, float)
     cell = np.asarray(cell, float)
@@ -33,7 +31,7 @@ def sample_plane(art, data, cell, *, origin=(0.0, 0.0, 0.0), depth=None, resolut
     ny = max(int((y1 - y0) / resolution), 2)
     X, Y = np.meshgrid(np.linspace(x0, x1, nx), np.linspace(y0, y1, ny))
     page = np.stack([X.ravel(), Y.ravel(), np.full(X.size, depth)], axis=1)
-    xyz = page @ R                     # R is orthonormal: page -> structure coordinates
+    xyz = page @ R                     # back to structure coordinates
     frac = (xyz - np.asarray(origin, float)) @ np.linalg.inv(cell)
     idx = (frac * np.array(data.shape)).T
     V = map_coordinates(data, idx, order=1, mode="grid-wrap" if periodic else "nearest")

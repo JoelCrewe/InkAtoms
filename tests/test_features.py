@@ -37,8 +37,6 @@ def rutile():
                    cellpar=[4.59, 4.59, 2.96, 90, 90, 90])
 
 
-# ---------------------------------------------------------------- structure data
-
 def test_ase_arrays_constraints_and_charges_kept():
     m = ase_build.molecule("H2O")
     m.set_initial_charges([-0.8, 0.4, 0.4])
@@ -71,7 +69,7 @@ def test_rdkit_and_smiles_bond_orders():
     fig, ax = plt.subplots()
     n1 = n_pieces(ia.draw(ax, s, view="auto"))
     n2 = n_pieces(ia.draw(ax, s, view="auto", bond_orders=True))
-    assert n2 == n1 + 2 * 1 + 2 * 2     # C=C adds one line pair of halves, C#N two
+    assert n2 == n1 + 2 * 1 + 2 * 2     # one extra line for C=C, two for C#N
 
 
 def test_mdanalysis_input():
@@ -90,8 +88,6 @@ def test_cell_from_parameters_roundtrip():
     assert np.isclose(np.degrees(np.arccos(cos_gamma)), 110)
 
 
-# ---------------------------------------------------------------- selection
-
 def test_images_boundary_and_make_whole():
     cu = ase_build.bulk("Cu", "fcc", a=3.6, cubic=True)
     b = select.boundary(cu)
@@ -105,8 +101,6 @@ def test_images_boundary_and_make_whole():
     whole = select.make_whole(mol)
     assert np.ptp(whole.positions[:, 0]) < 5.5
 
-
-# ---------------------------------------------------------------- colour, vectors
 
 def test_color_by_and_colorbar():
     fig, ax = plt.subplots()
@@ -127,8 +121,6 @@ def test_vectors_add_arrows():
     art = ia.draw(ax, m, view="z", vectors=v)
     assert n_pieces(art) == base + 2     # shaft + head
 
-
-# ---------------------------------------------------------------- polyhedra, rings, contacts
 
 def test_polyhedra_rutile_octahedra():
     fig, ax = plt.subplots()
@@ -171,8 +163,6 @@ def test_hbonds_and_bond_styles():
     dashed = n_pieces(ia.draw(ax, ethane, view="auto", bond_styles={(0, 1): "breaking"}))
     assert dashed > p0
 
-
-# ---------------------------------------------------------------- markers, cell extras, images
 
 def test_constraints_vacancies_ghosts_planes():
     slab = ase_build.fcc111("Pt", size=(2, 2, 2), vacuum=5.0)
@@ -244,8 +234,6 @@ def test_new_presets():
     assert ia.figsize("rsc", "double", 0.5) == (6.73, 3.365)
 
 
-# ---------------------------------------------------------------- slices
-
 def test_density_slice_samples_the_grid():
     fig, ax = plt.subplots()
     cell = np.diag([4.0, 4.0, 4.0])
@@ -260,8 +248,6 @@ def test_density_slice_samples_the_grid():
     ia.density_slice(art, data, cell)
 
 
-# ---------------------------------------------------------------- figures
-
 def test_inset_panels_animate():
     fig, ax = plt.subplots()
     ax.plot([0, 1], [0, 1])
@@ -274,7 +260,7 @@ def test_inset_panels_animate():
     assert len({ax_.get_xlim() for ax_ in axes}) == 1
     anim = ia.animate(ase_build.molecule("C6H6"), spin=90, view="auto")
     anim._func(2)       # draw a frame without saving
-    anim._draw_was_started = True   # silence "deleted without rendering"
+    anim._draw_was_started = True   # avoid the "deleted without rendering" warning
     assert len(arts) == 3
 
 
@@ -304,7 +290,7 @@ def test_cli(tmp_path):
 def test_explicit_bond_list():
     fig, ax = plt.subplots()
     s = (["C", "C", "C"], [[0, 0, 0], [1.5, 0, 0], [6, 0, 0]])
-    art = ia.draw(ax, s, view="z", bonds=[(0, 2)])          # far apart, but bonded because we say so
+    art = ia.draw(ax, s, view="z", bonds=[(0, 2)])
     assert n_pieces(art) == 3 + 2
     with pytest.raises(KeyError):
         ia.draw(ax, s, bonds=[(0, 9)])
@@ -315,7 +301,6 @@ def test_fade_distance_is_absolute():
     s = (["C", "C"], [[0, 0, 0], [3, 0, 1.0]])          # 1 Å apart in depth
     rel = ia.draw(ax, s, view="z", bonds=False)
     absf = ia.draw(ax, s, view="z", bonds=False, fade_distance=10.0)
-    # normalised: the back atom is fully faded; with a 10 Å fade length only a tenth
     assert rel.radii[0] < absf.radii[0] < absf.radii[1]
 
 

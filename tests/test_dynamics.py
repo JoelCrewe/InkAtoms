@@ -45,8 +45,6 @@ def dissociation(n=40, jitter=0.0, seed=0):
     return frames
 
 
-# ---------------------------------------------------------------- trajectory helpers
-
 def test_as_frames_track_and_mobile():
     frames = dissociation()
     structs, times = ia.as_frames(frames, ids="uid")
@@ -62,8 +60,6 @@ def test_unwrap_removes_jumps():
     un = ia.unwrap(path, cell)
     assert np.allclose(np.diff(un[:, 0]), 0.4, atol=1e-9)
 
-
-# ---------------------------------------------------------------- events
 
 def test_debounce_ignores_flicker():
     s = np.array([1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1])
@@ -90,8 +86,6 @@ def test_group_reactions_and_strip():
     assert len({ax.get_xlim() for ax in axes}) == 1
 
 
-# ---------------------------------------------------------------- trails
-
 def test_trails_add_segments():
     frames = dissociation()
     fig, ax = plt.subplots()
@@ -102,8 +96,6 @@ def test_trails_add_segments():
     art = ia.draw(ax, last, view="z", trails={"frames": frames, "ids": "mobile", "n": 1, "color": "time"})
     assert len(art.collection.get_paths()) > plain
 
-
-# ---------------------------------------------------------------- comparison
 
 def test_kabsch_recovers_rotation():
     rng = np.random.default_rng(0)
@@ -143,8 +135,6 @@ def test_draw_comparison():
     assert len(art.structure) == 2 * len(a)
     assert np.isclose(art.structure.arrays["_fade"][len(a):], 0.65).all()
 
-
-# ---------------------------------------------------------------- ML extras
 
 def test_fingerprints_and_environment_events():
     frames = dissociation()

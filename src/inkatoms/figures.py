@@ -1,4 +1,4 @@
-"""Figure-level helpers: structures inside plots, trajectory strips, animations."""
+"""Insets, panels and animations."""
 
 from __future__ import annotations
 
@@ -10,14 +10,11 @@ from .view import auto_view, view_matrix
 
 
 def inset(ax, atoms, xy, size=0.25, *, coords="data", frame=False, **draw_kwargs):
-    """Draw a structure in a small inset axes centred on xy.
+    """Draw a structure in a small inset centred on ``xy``.
 
-    xy      centre, in data coordinates of ax (coords="data") or axes fraction
-            (coords="axes"), e.g. a point on an energy profile
-    size    inset width and height as a fraction of ax (number or (w, h))
-    Set ax's limits before calling: the inset is placed where xy is at that moment.
-    Insets are left out of tight_layout / constrained layout.
-    Returns (inset_ax, StructureArtist).
+    ``xy`` is in data coordinates (or axes fraction with ``coords="axes"``), so set the
+    axes limits first. ``size`` is the inset size as a fraction of ``ax``. The inset is
+    excluded from tight/constrained layout. Returns ``(inset_ax, artist)``.
     """
     w, h = (size, size) if np.isscalar(size) else size
     if coords == "data":
@@ -45,9 +42,7 @@ def _frame_view(structs, view, up, rotate):
 
 def panels(axes, frames, *, view="z", up=None, rotate=None, same_limits=True, same_depth=True,
            pad=0.5, **draw_kwargs):
-    """Draw a sequence of frames into a row/grid of axes with one view, one depth
-    fade and (by default) identical framing, so a trajectory strip reads as one
-    figure. Returns the list of StructureArtists."""
+    """Draw frames into a row of axes with the same view, depth fade and limits."""
     axes = list(np.ravel(axes))
     structs = [as_structure(f) for f in frames]
     if len(axes) < len(structs):
@@ -70,12 +65,10 @@ def panels(axes, frames, *, view="z", up=None, rotate=None, same_limits=True, sa
 
 def animate(frames, *, fig=None, ax=None, spin=None, n_frames=None, interval=80, view="z",
             up=None, rotate=None, pad=0.5, title=None, **draw_kwargs):
-    """Animate a trajectory (or spin one structure) as a matplotlib FuncAnimation.
+    """FuncAnimation of a trajectory, or of one structure spinning (``spin`` degrees per frame).
 
-    frames   list of structures, or a single structure with spin=degrees per frame
-             about the page's vertical axis (n_frames defaults to a full turn)
-    title    optional callable frame_index -> str
-    Save with anim.save("movie.gif", writer="pillow") or .mp4 (needs ffmpeg).
+    ``title`` is an optional function of the frame index. Save with
+    ``anim.save("movie.gif", writer="pillow")``.
     """
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
@@ -94,7 +87,7 @@ def animate(frames, *, fig=None, ax=None, spin=None, n_frames=None, interval=80,
     fig = ax.figure
     R, view = _frame_view(structs, view, up, rotate)
     if spin is not None:
-        # a spinning structure: depth and limits from its bounding sphere
+        # fixed limits and depth range from the bounding sphere
         c = structs[0].positions.mean(axis=0)
         rad = np.linalg.norm(structs[0].positions - c, axis=1).max() + 1.5
         draw_kwargs.setdefault("depth_range", (float((c @ R.T)[2] - rad), float((c @ R.T)[2] + rad)))
