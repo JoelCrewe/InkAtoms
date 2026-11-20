@@ -89,7 +89,7 @@ class Style:
     bond_edgecolor: object = "darker"
     bond_edgewidth: float = 0.5
     darken: float = 0.45
-    shading: str = "flat"           # flat, glossy or soft
+    shading: str = "flat"           # flat, glossy, soft or matte
     depth_fade: float = 0.45
     depth_shrink: float = 0.12
     fade_distance: float | None = None

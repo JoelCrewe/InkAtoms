@@ -15,7 +15,7 @@ def build_parser():
     p.add_argument("--rotate", default=None, help="extra rotation, e.g. 20x,-30y")
     p.add_argument("--style", default="jmol", help="jmol, cpk, vesta, colourblind, greyscale, bw, dark")
     p.add_argument("--mode", default="ballstick", choices=["ballstick", "spacefill", "sticks"])
-    p.add_argument("--shading", default=None, choices=["flat", "glossy", "soft"])
+    p.add_argument("--shading", default=None, choices=["flat", "glossy", "soft", "matte"])
     p.add_argument("--no-depth-cue", action="store_true", help="no fading or shrinking with depth")
     p.add_argument("--perspective", type=float, default=None, help="camera distance in Å")
     p.add_argument("--cell", action="store_true", help="draw the unit cell")

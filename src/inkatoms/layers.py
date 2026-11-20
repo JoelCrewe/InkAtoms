@@ -15,6 +15,17 @@ from .styles import edge_of, mix
 
 _EMPTY = (np.zeros(0, int), np.zeros(0, int), np.zeros((0, 3), int))
 
+# "matte" shading: a diffuse sphere, brightness ambient + diffuse x cos(normal, view),
+# no highlight. The defaults match OVITO's Tachyon renders: about 1.1 x the base colour
+# at the centre, darkening to about 0.85 x at the rim.
+_MATTE_AMBIENT, _MATTE_DIFFUSE = 0.85, 0.25
+_MATTE_STEPS = 20
+_MATTE_OFFSET = 0.12
+
+
+def _matte(face, cos):
+    return np.clip(np.asarray(face, float) * (_MATTE_AMBIENT + _MATTE_DIFFUSE * cos), 0.0, 1.0)
+
 
 @dataclass
 class Ctx:
@@ -64,7 +75,12 @@ def atoms(ctx, highlight_front=False, constraints=None):
             edge_rule = st.highlight_edgecolor
         edge = edge_of(face, edge_rule, st.darken)
         lw = (st.highlight_edgewidth if hl[a] else st.atom_edgewidth) * k_atom[a]
-        body = mix(face, (0, 0, 0), 0.12) if st.shading == "soft" else face
+        if st.shading == "soft":
+            body = mix(face, (0, 0, 0), 0.12)
+        elif st.shading == "matte":
+            body = _matte(face, 0.5 / _MATTE_STEPS)
+        else:
+            body = face
         da = depth[a] + (1e6 if (highlight_front and hl[a]) else 0.0)
         gid = f"atom-{s.ids[a]}"
         scene.add(da, a, 0, _circle((x, y), r), scene.rgba(body, fade), scene.rgba(edge, fade), lw, gid=gid)
@@ -89,12 +105,21 @@ def atoms(ctx, highlight_front=False, constraints=None):
                 c = mix(face, (1, 1, 1), 0.55 * fk ** 1.3) if fk > 0.3 else face
                 scene.add(da, a, k, _circle((x - off * 0.7071, y + off * 0.7071), rad),
                           scene.rgba(c, fade), (0, 0, 0, 0), 0.0, gid=gid)
+        elif st.shading == "matte":
+            # nested discs, equal steps in brightness, lit slightly from the upper left
+            for k in range(1, _MATTE_STEPS):
+                cos = k / _MATTE_STEPS
+                rad = r * np.sqrt(1.0 - cos * cos)
+                off = (r - rad) * _MATTE_OFFSET
+                scene.add(da, a, k, _circle((x - off * 0.7071, y + off * 0.7071), rad),
+                          scene.rgba(_matte(face, cos + 0.5 / _MATTE_STEPS), fade), (0, 0, 0, 0), 0.0,
+                          gid=gid)
         if st.shading == "glossy":
             for k, (offf, radf, alpha) in enumerate(((0.30, 0.30, 0.30), (0.36, 0.13, 0.75)), start=20):
                 scene.add(da, a, k, _circle((x - offf * r, y + offf * r), radf * r),
                           (1, 1, 1, alpha * (1 - fade)), (0, 0, 0, 0), 0.0, gid=gid)
-        elif st.shading not in ("flat", "soft"):
-            raise ValueError("shading must be flat, glossy or soft")
+        elif st.shading not in ("flat", "soft", "matte"):
+            raise ValueError("shading must be flat, glossy, soft or matte")
         if fixed[a]:
             for ang in (45.0, -45.0):
                 u = np.array([np.cos(np.radians(ang)), np.sin(np.radians(ang))]) * 0.62 * r
