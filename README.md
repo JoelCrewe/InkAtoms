@@ -12,8 +12,6 @@ same fonts, axes and annotations.
 
 - **Depth cueing**: atoms further back fade towards the page and shrink, so a
   flat projection still reads in 3D; highlighted atoms are never faded.
-- **Correct overlaps**: atoms, half-bonds, polyhedra, rings, arrows and cell
-  edges are depth-sorted together.
 - **Everything a structure figure needs**: bond orders, colour by any per-atom
   value with a colorbar, per-atom arrows, coordination polyhedra, rings,
   hydrogen bonds, breaking/forming bonds, labels, measured distances and
@@ -43,13 +41,12 @@ From a clone: `pip install -e ".[dev]"`.
 ## Tutorial
 
 New to inkatoms? [`examples/tutorial.ipynb`](examples/tutorial.ipynb) is a beginner's tour with
-sliders and menus to play with: views, styles, depth, labels, molecules, crystals, colouring,
+sliders and menus with: views, styles, depth, labels, molecules, crystals, colouring,
 cutting out regions, paper figures, reactions in trajectories and comparing structures.
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/JoelCrewe/InkAtoms/blob/main/examples/tutorial.ipynb)
 
 Locally: `pip install "inkatoms[all]" ipywidgets jupyterlab`, then `jupyter lab examples/tutorial.ipynb`.
-The sliders need a running notebook (Jupyter, VS Code or Colab); GitHub's preview shows the text only.
 
 
 ## Quick start
@@ -160,12 +157,6 @@ fig = plt.figure(figsize=ia.figsize("rsc", "double", 0.4))
 ia.picker(art)                                           # hover to see ids (interactive backends)
 ia.draw(ax, atoms, editable=True)                        # one SVG element per atom ("atom-12")
 ```
-
-## Fonts on macOS
-
-matplotlib before 3.11 reads only the regular face of macOS's Helvetica
-collection, so `fontweight="bold"` silently prints regular. `ia.use_collection_faces()`
-registers the other faces (from a local cache) and bold works again.
 
 ## Trajectories: events, trails and comparisons
 
