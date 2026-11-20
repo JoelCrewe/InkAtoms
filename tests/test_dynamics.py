@@ -241,3 +241,16 @@ def test_link_new_tracks_when_atoms_jump_too_far():
     frames[2].positions[0] += [20, 0, 0]          # teleports: must start a new track
     res = ia.link(frames, method="distance", max_jump=1.0, memory=0)
     assert res.new_tracks == 1 and res.frames[2].ids[0] != res.frames[1].ids[0]
+
+
+def test_active_colour():
+    assert np.allclose(ia.active_colour("white"), (0.91, 0.31, 0.23))
+    r, g, b = ia.active_colour((0.8, 0.8, 0.8))          # a grey metal stays grey, just darker
+    assert max(r, g, b) < 0.5 and abs(r - b) < 0.15
+    r, g, b = ia.active_colour("#f2d24b")                # S yellow: darker yellow
+    assert r > b and g > b
+
+
+def test_active_colour_light_metals_stay_grey():
+    r, g, b = ia.active_colour(ia.style("jmol").color("Pt"))
+    assert r < 0.6 and abs(r - g) < 0.1

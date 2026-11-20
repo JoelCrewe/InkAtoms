@@ -206,15 +206,17 @@ def _pick_frames(reaction, n_panels, lead, settle, n_frames):
 
 
 def active_colour(colour):
-    """Darker, more saturated version of an element colour; white becomes red."""
+    """Darker, more saturated version of an element colour; white becomes red, grey a dark grey."""
     import colorsys
 
     from matplotlib.colors import to_rgb
 
     r, g, b = to_rgb(colour)
     h, s, v = colorsys.rgb_to_hsv(r, g, b)
-    if s < 0.15:                     # white/grey (H): use red
+    if s < 0.15 and v > 0.95:        # white (H): no hue to deepen, use red
         return (0.91, 0.31, 0.23)
+    if s < 0.15:                     # grey (Pt, C): darker, slightly blue grey
+        return (v * 0.45, v * 0.5, v * 0.58)
     return colorsys.hsv_to_rgb(h, min(1.0, s * 1.35 + 0.1), v * 0.78)
 
 

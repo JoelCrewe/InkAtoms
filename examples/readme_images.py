@@ -112,3 +112,86 @@ cu = bulk("Cu", "fcc", a=3.61, cubic=True)
 ia.draw(axes[3], cu, view="z", rotate="-25x,20y", ghosts=1.9, cell=True, shading="soft")
 axes[3].set_title("ghost images", fontsize=9)
 save(fig, "features")
+
+from ase import Atoms
+from ase.build import add_adsorbate, fcc111
+from ase.calculators.emt import EMT
+from ase.constraints import FixAtoms
+from ase.optimize import BFGS
+
+# 7. trajectories: a scripted reaction on Pt(111), OH + H -> H2O, which then leaves
+slab = fcc111("Pt", size=(4, 4, 3), vacuum=8.0)
+top = slab.positions[slab.get_tags() == 1]
+z_top = top[:, 2].max()
+centre = top[:, :2].mean(axis=0)
+near = top[np.argsort(np.linalg.norm(top[:, :2] - centre, axis=1))[:3]]
+hollow = near[:, :2].mean(axis=0)
+o0 = np.array([*hollow, z_top + 1.2])
+ang = np.radians(52)
+h1_rel = 0.97 * np.array([np.sin(ang), 0, np.cos(ang)])
+h2_rel = 0.97 * np.array([-np.sin(ang), 0, np.cos(ang)])
+pt_far = top[np.argmin(np.linalg.norm(top[:, :2] - (hollow + [-2.8, 0]), axis=1))]
+h2_start = pt_far + [0, 0, 1.55]
+
+rng = np.random.default_rng(4)
+frames = []
+n_frames = 90
+for f in range(n_frames):
+    o = o0 + [0, 0, 0.16 * max(f - 55, 0)]
+    s = np.clip((f - 12) / 25, 0, 1)
+    lift = [0, 0, 0.6 * np.sin(np.pi * s)]          # over the Pt in between, not onto it
+    h2 = (1 - s) * h2_start + s * (o0 + h2_rel) + lift if f < 55 else o + h2_rel
+    pos = np.vstack([slab.positions, o, o + h1_rel, h2])
+    pos += rng.normal(0, 0.03, pos.shape)
+    a = Atoms(list(slab.get_chemical_symbols()) + ["O", "H", "H"], positions=pos, cell=slab.cell, pbc=slab.pbc)
+    a.new_array("uid", np.arange(len(a)))
+    a.info["time_ps"] = 0.05 * f
+    frames.append(a)
+O, H1, H2 = len(slab), len(slab) + 1, len(slab) + 2
+cut = {"Pt-O": 2.4, "Pt-H": 1.9, "O-H": 1.2, "Pt-Pt": 3.0}
+rx = ia.find_reactions(frames, cutoffs=cut, only=[O, H2], min_frames=4)[0]
+print(rx)
+
+# relaxation of an O adatom on Pt(111) with EMT, bottom layer fixed
+start = fcc111("Pt", size=(4, 4, 3), vacuum=8.0)
+add_adsorbate(start, "O", 1.5, "fcc")
+start.set_constraint(FixAtoms(indices=[a.index for a in start if a.tag == 3]))
+relaxed = start.copy()
+relaxed.calc = EMT()
+BFGS(relaxed, logfile=None).run(fmax=0.02)
+
+fig = plt.figure(figsize=(9.2, 5.4))
+top_row = fig.add_gridspec(1, 4, left=0.01, right=0.99, top=0.9, bottom=0.55, wspace=0.05)
+strip = [fig.add_subplot(top_row[0, k]) for k in range(4)]
+ia.event_strip(strip, frames, rx, focus=O, view="-y", window=(9, 7.5), anchor=(0.5, 0.35), slab=3.0,
+               cutoffs=cut, shading="soft", fontsize=8, lead=6, settle=3)
+fig.text(0.01, 0.955, "find_reactions + event_strip", fontsize=9, fontweight="bold")
+
+bottom = fig.add_gridspec(1, 3, left=0.02, right=0.985, top=0.43, bottom=0.08, wspace=0.3,
+                          width_ratios=[1, 1.1, 1.15])
+ax = fig.add_subplot(bottom[0, 0])
+last = frames[-1]
+ia.draw(ax, last, view="-y", cutoffs=cut, shading="soft", pbc_bonds=False, autoscale=False,
+        highlight={O: "#e8503a", H1: "#f2f2f2", H2: "#f2f2f2"}, highlight_front=True,
+        trails={"frames": frames, "ids": [O, H2], "style": "arrow", "color": "#c0392b"})
+q = o0 @ ia.view_matrix("-y").T
+ax.set_xlim(q[0] - 5.5, q[0] + 5.5)
+ax.set_ylim(q[1] - 4.5, q[1] + 6.5)
+ax.set_title('trails={"style": "arrow"}', fontsize=8, loc="left")
+
+ax = fig.add_subplot(bottom[0, 1])
+ia.plot_neighbours(ax, frames, O, cutoffs=cut, events=rx.events, min_frames=4,
+                   colors={"Pt": "#5f6f7a", "H": "#c0392b"})
+ax.set_title("plot_neighbours (the O)", fontsize=8, loc="left")
+for sp in ("top", "right"):
+    ax.spines[sp].set_visible(False)
+
+ax = fig.add_subplot(bottom[0, 2])
+art, cmp_ = ia.draw_comparison(ax, start, relaxed, view="-y", rotate="15x", pbc_bonds=False,
+                               arrow_scale=12, min_shift=0.01, vmax=0.12, shading="soft")
+cax = ax.inset_axes([0.25, -0.05, 0.5, 0.035])
+cb = fig.colorbar(art.mappable, cax=cax, orientation="horizontal")
+cb.set_label("moved (Å)", fontsize=7, labelpad=1)
+cb.ax.tick_params(labelsize=6)
+ax.set_title("draw_comparison: O on Pt(111) relaxed (EMT)", fontsize=8, loc="left")
+save(fig, "dynamics")

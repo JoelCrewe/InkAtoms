@@ -169,6 +169,8 @@ registers the other faces (from a local cache) and bold works again.
 
 ## Trajectories: events, trails and comparisons
 
+![events, trails and comparisons](docs/images/dynamics.png)
+
 ```python
 frames = ase.io.read("md.xyz", ":")                 # atoms carry a persistent "uid" array
 
