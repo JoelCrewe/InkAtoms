@@ -36,12 +36,16 @@ Documentation and gallery: https://joelcrewe.github.io/InkAtoms
 
 ## Install
 
+inkatoms is not on PyPI yet. Clone the repository and install it in editable mode:
+
 ```bash
-pip install inkatoms            # once released on PyPI
-pip install "inkatoms[all]"     # plus ASE, pymatgen, RDKit, MDAnalysis
+git clone https://github.com/JoelCrewe/InkAtoms.git
+cd InkAtoms
+pip install -e .                # numpy, scipy, matplotlib only
+pip install -e ".[all]"         # plus ASE, pymatgen, RDKit, MDAnalysis
 ```
 
-From a clone: `pip install -e ".[dev]"`.
+Because the install is editable, `git pull` in the clone updates inkatoms.
 
 ## Tutorial
 
@@ -51,7 +55,7 @@ cutting out regions, paper figures, reactions in trajectories and comparing stru
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/JoelCrewe/InkAtoms/blob/main/examples/tutorial.ipynb)
 
-Locally: `pip install "inkatoms[all]" ipywidgets jupyterlab`, then `jupyter lab examples/tutorial.ipynb`.
+Locally, from the clone: `pip install -e ".[all]" ipywidgets jupyterlab`, then `jupyter lab examples/tutorial.ipynb`.
 
 
 ## Quick start
@@ -195,7 +199,7 @@ tracked = ia.link(unlabelled_frames, method="learned", model=model, max_jump=1.5
 
 Atoms inserted or removed (grand-canonical runs) are reported as "atom added" /
 "removed". `inkatoms.ml` adds local-environment descriptors (a built-in radial
-fingerprint, or SOAP via `pip install "inkatoms[ml]"`), `environment_states` (k-means
+fingerprint, or SOAP via `pip install -e ".[ml]"`), `environment_states` (k-means
 over all frames) and `environment_events`, which find environment changes without
 any bond cutoff; on the MoS3 etching trajectory they pick out the same moments as
 the bond events.

@@ -4,10 +4,16 @@ Quick start
 Install
 -------
 
+inkatoms is not on PyPI yet. Clone the repository and install it in editable mode:
+
 .. code-block:: bash
 
-   pip install inkatoms            # numpy, scipy, matplotlib only
-   pip install "inkatoms[all]"     # plus ASE, pymatgen, RDKit, MDAnalysis
+   git clone https://github.com/JoelCrewe/InkAtoms.git
+   cd InkAtoms
+   pip install -e .                # numpy, scipy, matplotlib only
+   pip install -e ".[all]"         # plus ASE, pymatgen, RDKit, MDAnalysis
+
+Because the install is editable, ``git pull`` in the clone updates inkatoms.
 
 Drawing
 -------
