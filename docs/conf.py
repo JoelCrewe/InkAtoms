@@ -21,6 +21,14 @@ autosummary_generate = True
 autodoc_member_order = "bysource"
 html_theme = "furo"
 html_title = f"inkatoms {release}"
+html_static_path = ["_static"]
+html_favicon = "_static/logo/favicon.ico"
+html_theme_options = {
+    # wordmark made by _static/logo/make_logo.py
+    "light_logo": "logo/inkatoms_logo.svg",
+    "dark_logo": "logo/inkatoms_logo_dark.svg",
+    "sidebar_hide_name": True,
+}
 exclude_patterns = ["_build", "images"]
 
 sphinx_gallery_conf = {

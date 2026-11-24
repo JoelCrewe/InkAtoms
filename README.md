@@ -1,4 +1,9 @@
-# inkatoms
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/_static/logo/inkatoms_logo_dark.svg">
+    <img alt="inkatoms" src="docs/_static/logo/inkatoms_logo.svg" width="440">
+  </picture>
+</h1>
 
 Drawings of atomic structures, made natively in matplotlib. A drawing
 is one depth-sorted vector artist, so it stays sharp in a PDF, can be edited in
