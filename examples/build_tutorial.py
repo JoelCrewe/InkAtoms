@@ -15,8 +15,19 @@ def md(text):
     cells.append(nbf.v4.new_markdown_cell(text.strip("\n")))
 
 
-def code(text):
-    cells.append(nbf.v4.new_code_cell(text.strip("\n")))
+def code(text, hidden=None):
+    """Add a code cell. ``hidden="Title"`` folds the source away behind that title.
+
+    Colab shows a hidden cell as its ``#@title`` with a "Show code" toggle (``cellView: form``);
+    JupyterLab collapses it (``jupyter.source_hidden``). Hide only set-up and made-up data, never
+    the inkatoms calls the tutorial is teaching.
+    """
+    text = text.strip("\n")
+    metadata = {}
+    if hidden:
+        text = f"#@title {hidden}\n{text}"
+        metadata = {"cellView": "form", "jupyter": {"source_hidden": True}}
+    cells.append(nbf.v4.new_code_cell(text, metadata=metadata))
 
 
 # --------------------------------------------------------------------------- intro
@@ -63,11 +74,20 @@ If you are running this on your own computer, install inkatoms once in a termina
 pip install "inkatoms[all]" ipywidgets
 ```
 
-On **Google Colab**, remove the `#` from the first line of the next cell and run it.
+On **Google Colab** the next cell installs it for you (this takes a minute the first time).
+Just run it; you do not need to read its code.
+
+Under every interactive picture in this notebook, the line of code that draws exactly that
+picture is printed, so you can copy it into your own work.
 """)
 
 code("""
-# %pip install -q "inkatoms[all] @ git+https://github.com/JoelCrewe/InkAtoms" ipywidgets
+import sys
+
+if "google.colab" in sys.modules:                 # Colab: install inkatoms into this session
+    get_ipython().run_line_magic("pip", 'install -q "inkatoms[all] @ git+https://github.com/JoelCrewe/InkAtoms" ipywidgets')
+    from google.colab import output
+    output.enable_custom_widget_manager()
 
 %matplotlib inline
 import numpy as np
@@ -83,9 +103,30 @@ except ImportError:
                       "where you installed it (Kernel > Change kernel), or run: "
                       '%pip install "inkatoms[all]" ipywidgets') from None
 
+try:                                               # keep RDKit's own error messages quiet
+    from rdkit import RDLogger
+    RDLogger.DisableLog("rdApp.*")
+except ImportError:
+    pass
+
+
+class raw(str):
+    \"\"\"A variable name to print as it is, without quotes.\"\"\"
+    def __repr__(self):
+        return str(self)
+
+
+def print_call(func, *args, **kwargs):
+    \"\"\"Print the call that makes the picture above, leaving out options that are None.\"\"\"
+    def as_code(value):
+        return repr(round(value, 3) if isinstance(value, float) else value).replace("'", '"')
+    options = [f"{key}={as_code(value)}" for key, value in kwargs.items() if value is not None]
+    print(f"{func}({', '.join([*args, *options])})")
+
+
 plt.rcParams["figure.dpi"] = 110
 print("inkatoms", ia.__version__, "is ready")
-""")
+""", hidden="Setup: run this first")
 
 # --------------------------------------------------------------------------- 1
 md("""
@@ -137,8 +178,8 @@ ethanol = molecule("CH3CH2OH")
 def show(view="auto", tilt_x=0, tilt_y=0):
     fig, ax = plt.subplots(figsize=(3.4, 3.4))
     ia.draw(ax, ethanol, view=view, rotate=f"{tilt_x}x,{tilt_y}y")
-    ax.set_title(f'view="{view}", rotate="{tilt_x}x,{tilt_y}y"', fontsize=8)
     plt.show()
+    print_call("ia.draw", "ax", "ethanol", view=view, rotate=f"{tilt_x}x,{tilt_y}y" if tilt_x or tilt_y else None)
 """)
 
 md("""
@@ -168,6 +209,8 @@ def show(molecule_name="DMSO (S, O)", style="jmol", shading="soft", mode="ballst
     art = ia.draw(ax, mol, view="auto", rotate="25x", style=style, shading=shading, mode=mode)
     ia.legend(ax, art, loc="lower left", fontsize=7, ncol=4)
     plt.show()
+    print_call("ia.draw", "ax", f'molecule("{molecules[molecule_name]}")', view="auto", rotate="25x",
+               style=style, shading=shading, mode=mode)
 """)
 
 md("""
@@ -200,6 +243,9 @@ def show(depth_cue=True, depth_fade=0.6, depth_shrink=0.12, tilt=55):
     ia.draw(ax, sheet, view="z", rotate=f"-{tilt}x", depth_cue=depth_cue,
             depth_fade=depth_fade, depth_shrink=depth_shrink, shading="soft")
     plt.show()
+    print_call("ia.draw", "ax", "sheet", view="z", rotate=f"-{tilt}x", depth_cue=depth_cue,
+               depth_fade=depth_fade if depth_cue else None, depth_shrink=depth_shrink if depth_cue else None,
+               shading="soft")
 """)
 
 md("""
@@ -231,6 +277,10 @@ def show(show_ids=True, highlight_atom=1, atom_i=0, atom_j=2):
     if atom_i != atom_j:
         ia.measure(art, [atom_i, atom_j])
     plt.show()
+    print_call("art = ia.draw", "ax", "acid", view="auto", shading="soft", highlight={highlight_atom: "#e8503a"},
+               labels="id" if show_ids else None)
+    if atom_i != atom_j:
+        print_call("ia.measure", "art", f"[{atom_i}, {atom_j}]")
 """)
 
 md("""
@@ -254,12 +304,6 @@ molecule from a SMILES string and keeps RDKit's exact bond orders. Type any SMIL
 """)
 
 code("""
-try:                                   # keep RDKit's own error messages quiet
-    from rdkit import RDLogger
-    RDLogger.DisableLog("rdApp.*")
-except ImportError:
-    pass
-
 examples = {"caffeine": "Cn1cnc2c1c(=O)n(C)c(=O)n2C", "aspirin": "CC(=O)Oc1ccccc1C(=O)O",
             "acrylonitrile": "C=CC#N", "paracetamol": "CC(=O)Nc1ccc(O)cc1"}
 
@@ -274,8 +318,10 @@ def show(example="caffeine", your_smiles="", bond_orders=True, rings=False):
     fig, ax = plt.subplots(figsize=(4, 3.4))
     ia.draw(ax, mol, view="auto", bond_orders=bond_orders, shading="soft",
             rings={"aromatic": "auto"} if rings else None)
-    ax.set_title(smiles, fontsize=7)
     plt.show()
+    print_call("mol = ia.from_smiles", f'"{smiles}"')
+    print_call("ia.draw", "ax", "mol", view="auto", bond_orders=bond_orders, shading="soft",
+               rings={"aromatic": "auto"} if rings else None)
 """)
 
 # --------------------------------------------------------------------------- 7
@@ -305,14 +351,17 @@ rocksalt = bulk("NaCl", "rocksalt", a=5.64, cubic=True)
 def show(structure="rutile TiO2 (2x2x2)", polyhedra=True, cell=True, boundary=False, plane_111=False,
          tilt=25, spin=20):
     if structure.startswith("rutile"):
-        atoms, centre = select.tile(rutile, (2, 2, 2), centred=False), "Ti"
+        atoms, centre, name = select.tile(rutile, (2, 2, 2), centred=False), "Ti", "select.tile(rutile, (2, 2, 2), centred=False)"
     else:
-        atoms, centre = rocksalt, "Na"
+        atoms, centre, name = rocksalt, "Na", "rocksalt"
     fig, ax = plt.subplots(figsize=(4, 3.8))
     ia.draw(ax, atoms, view="z", rotate=f"-{tilt}x,{spin}y", style="vesta", cell=cell, boundary=boundary,
             polyhedra={"centers": centre} if polyhedra else None, pbc_bonds=False,
             planes=[(1, 1, 1)] if plane_111 else None)
     plt.show()
+    print_call("ia.draw", "ax", name, view="z", rotate=f"-{tilt}x,{spin}y", style="vesta", cell=cell,
+               boundary=boundary, polyhedra={"centers": centre} if polyhedra else None, pbc_bonds=False,
+               planes=[(1, 1, 1)] if plane_111 else None)
 """)
 
 # --------------------------------------------------------------------------- 8
@@ -332,7 +381,9 @@ slab = fcc111("Pt", size=(4, 4, 3), vacuum=6.0)
 add_adsorbate(slab, molecule("CO"), 1.9, "ontop")
 rng = np.random.default_rng(0)
 fake_charges = rng.normal(0, 0.3, len(slab))          # stand-in for your own per-atom data
+""", hidden="Make a Pt(111) slab with CO on top, and made-up per-atom charges")
 
+code("""
 @interact(colour_by=["z (height)", "coordination", "my own array"], cmap=["viridis", "cividis", "magma", "RdBu_r"],
           side_view=True)
 def show(colour_by="z (height)", cmap="viridis", side_view=True):
@@ -342,6 +393,10 @@ def show(colour_by="z (height)", cmap="viridis", side_view=True):
                   color_by=value, cmap=cmap, cutoffs={"Pt-Pt": 3.0}, pbc_bonds=False)
     ia.colorbar(art, label=colour_by)
     plt.show()
+    print_call("art = ia.draw", "ax", "slab", view="-y" if side_view else "z", rotate="10x" if side_view else None,
+               color_by=raw("fake_charges") if colour_by == "my own array" else value, cmap=cmap,
+               cutoffs={"Pt-Pt": 3.0}, pbc_bonds=False)
+    print_call("ia.colorbar", "art", label=colour_by)
 """)
 
 # --------------------------------------------------------------------------- 9
@@ -371,6 +426,11 @@ def show(cut="thin slab", size=3.5, depth_cue=True):
     art = ia.draw(ax, part, view="-y", highlight={site: "#e8503a"}, depth_cue=depth_cue)
     ax.set_title(f"{len(part)} of {len(big)} atoms kept", fontsize=8)
     plt.show()
+    if cut == "thin slab":
+        print_call("part = select.slab", "big", axis="y", half_width=size, at=[site], keep=[site])
+    else:
+        print_call("part = select.around", "big", at=[site], radius=2 * size, keep=[site])
+    print_call("ia.draw", "ax", "part", view="-y", highlight={site: "#e8503a"}, depth_cue=depth_cue)
 """)
 
 # --------------------------------------------------------------------------- 10
@@ -435,7 +495,9 @@ for f in range(60):
     frame.new_array("uid", np.arange(5))
     frame.info["time_ps"] = 0.1 * f
     frames.append(frame)
+""", hidden="Make a pretend 60-frame trajectory")
 
+code("""
 cutoffs = {"S-H": 1.6, "S-S": 2.45}
 reaction = ia.find_reactions(frames, cutoffs=cutoffs, min_frames=4)[0]
 print(reaction)
@@ -469,6 +531,10 @@ def show(style="arrow", which="both"):
     ax2.set_title("neighbours of S 0 over time", fontsize=8)
     plt.tight_layout()
     plt.show()
+    print_call("ia.draw", "ax1", "frames[-1]", view="z", rotate="-55x", cutoffs=raw("cutoffs"), shading="soft",
+               trails={"frames": raw("frames"), "ids": ids, "style": style, "color": "#c0392b"})
+    print_call("ia.plot_neighbours", "ax2", "frames", "0", cutoffs=raw("cutoffs"), events=raw("reaction.events"),
+               min_frames=4)
 """)
 
 # --------------------------------------------------------------------------- 12
@@ -493,7 +559,9 @@ before = cluster.copy()
 cluster.calc = EMT()
 BFGS(cluster, logfile=None).run(fmax=0.05)
 after = cluster
+""", hidden="Make a before/after pair: a shaken Cu cluster, then relaxed with EMT")
 
+code("""
 @interact(arrow_scale=(1.0, 10.0, 0.5), min_shift=(0.0, 0.3, 0.02))
 def show(arrow_scale=3.0, min_shift=0.05):
     fig, ax = plt.subplots(figsize=(4.2, 3.6))
@@ -502,6 +570,8 @@ def show(arrow_scale=3.0, min_shift=0.05):
     ia.colorbar(art, label="moved (Å)")
     ax.set_title(f"RMSD {comparison.rmsd:.2f} Å", fontsize=8)
     plt.show()
+    print_call("art, comparison = ia.draw_comparison", "ax", "before", "after", view="z", rotate="-20x",
+               shading="soft", arrow_scale=arrow_scale, min_shift=min_shift)
 """)
 
 md("""
